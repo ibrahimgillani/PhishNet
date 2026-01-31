@@ -240,7 +240,7 @@ class PhishNetChatbot {
 
     try {
       // Call backend API
-      const response = await fetch('/api/chatbot/message', {
+      const response = await fetch(getApiUrl(window.API_CONFIG.api.endpoints.chatbot.message), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -58,7 +58,7 @@ class AuthManager {
 
   login(email, password) {
     // Call backend API to login user
-    return fetch('/api/auth/login', {
+    return fetch(getApiUrl(window.API_CONFIG.api.endpoints.auth.login), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -119,7 +119,7 @@ class AuthManager {
       try {
         const token = localStorage.getItem('token');
         if (token) {
-          await fetch('/api/auth/logout', {
+          await fetch(getApiUrl(window.API_CONFIG.api.endpoints.auth.logout), {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -203,7 +203,7 @@ class AuthManager {
 
   register(userData) {
     // Call backend API to register user
-    return fetch('/api/auth/register', {
+    return fetch(getApiUrl(window.API_CONFIG.api.endpoints.auth.register), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -264,7 +264,7 @@ class AuthManager {
     if (!token) return null;
 
     try {
-      const response = await fetch('/api/users/profile', {
+      const response = await fetch(getApiUrl(window.API_CONFIG.api.endpoints.users.profile), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -668,7 +668,7 @@ class ScanManager {
         return;
       }
 
-      const response = await fetch('/api/users/history?limit=50', {
+      const response = await fetch(getApiUrlWithParams(window.API_CONFIG.api.endpoints.users.history, { limit: 50 }), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

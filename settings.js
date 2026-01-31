@@ -10,7 +10,9 @@ const avatarUploadStatus = document.getElementById('avatarUploadStatus');
 let currentAvatarURL = null;
 
 const tokenKey = 'token';
-const apiBase = '/api';
+
+// Get API base URL from config.js
+const apiBase = (window.API_CONFIG && window.API_CONFIG.api.baseURL) || 'http://localhost:3000';
 
 // Debounce helper to prevent rapid API calls
 function debounce(func, wait) {
@@ -291,7 +293,7 @@ avatarRemoveBtn?.addEventListener('click', async () => {
       avatarRemoveBtn.disabled = true;
     }
 
-    const result = await authFetch(`${apiBase}/users/profile/avatar`, {
+    const result = await authFetch(`${apiBase}/api/users/profile/avatar`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ remove: true }),
@@ -340,7 +342,7 @@ async function loadAndSyncProfile() {
   try {
     // Always fetch fresh data from server on page load to ensure latest image is shown
     // This prevents showing stale cached images when avatar is updated
-    const result = await authFetch(`${apiBase}/users/profile`);
+    const result = await authFetch(`${apiBase}/api/users/profile`);
     console.log('Profile fetched from server:', {
       hasUser: !!result?.data?.user,
       hasAvatar: !!result?.data?.user?.avatar,
@@ -372,7 +374,7 @@ async function loadAndSyncProfile() {
 // Fetch profile data in the background without blocking UI
 async function fetchAndSyncProfileInBackground() {
   try {
-    const result = await authFetch(`${apiBase}/users/profile`);
+    const result = await authFetch(`${apiBase}/api/users/profile`);
     const user = result?.data?.user;
     if (user) {
       syncUserState(user);
@@ -596,7 +598,7 @@ profileForm?.addEventListener('submit', async (e) => {
   }
   
   try {
-    const result = await authFetch(`${apiBase}/users/profile`, {
+    const result = await authFetch(`${apiBase}/api/users/profile`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ firstName, lastName, email }),
@@ -621,7 +623,7 @@ profileForm?.addEventListener('submit', async (e) => {
         savedAvatarLength: result?.data?.user?.avatar?.length
       });
       
-      const avatarResult = await authFetch(`${apiBase}/users/profile/avatar`, {
+      const avatarResult = await authFetch(`${apiBase}/api/users/profile/avatar`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ avatar: currentAvatarURL, fitMode: 'cover' }),
@@ -705,7 +707,7 @@ passwordForm?.addEventListener('submit', async (e) => {
   }
   
   try {
-    await authFetch(`${apiBase}/users/password`, {
+    await authFetch(`${apiBase}/api/users/password`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),

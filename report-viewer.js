@@ -94,7 +94,7 @@ class ReportViewer {
     }
 
     // Logged-in: fetch recent history from server and find the report by id
-    fetch('/api/users/history?limit=200', {
+    fetch(getApiUrlWithParams(window.API_CONFIG.api.endpoints.users.history, { limit: 200 }), {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,

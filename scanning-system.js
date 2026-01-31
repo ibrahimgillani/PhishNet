@@ -65,7 +65,7 @@ class ScanningSystem {
         return;
       }
 
-      const response = await fetch('/api/users/history?limit=100', {
+      const response = await fetch(getApiUrlWithParams(window.API_CONFIG.api.endpoints.users.history, { limit: 100 }), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -408,7 +408,7 @@ class ScanningSystem {
   async scanUrlViaBackend(url) {
     console.log('[scanUrlViaBackend] Sending scan request', { url });
     const token = localStorage.getItem('token');
-    const response = await fetch('/api/scan-url', {
+    const response = await fetch(getApiUrl(window.API_CONFIG.api.endpoints.scan.url), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

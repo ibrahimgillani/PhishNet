@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:3000 https://localhost:3000 https://cdn.jsdelivr.net;">
   <title>Settings - PhishNet</title>
   <meta name="description" content="Manage your PhishNet account settings, preferences, and security options.">
   
@@ -60,10 +61,10 @@
                 <button type="button" class="btn btn-outline btn-sm" id="avatarUploadBtn">Upload</button>
                 <span class="button-separator">/</span>
                 <button type="button" class="btn btn-ghost btn-sm btn-remove" id="avatarRemoveBtn">Remove</button>
-                <div id="avatarUploadStatus" class="avatar-status">
-                  <svg class="spinner-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  <span>Uploading...</span>
-                </div>
+              </div>
+              <div id="avatarUploadStatus" class="avatar-status">
+                <svg class="spinner-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>Uploading...</span>
               </div>
             </div>
           </div>
@@ -304,6 +305,7 @@
       © 2025 PhishNet. All rights reserved.
     </div>
   </footer>
+  <script src="config.js"></script>
   <script src="app.js"></script>
   <script src="settings.js"></script>
 

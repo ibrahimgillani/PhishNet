@@ -1598,20 +1598,71 @@ footer {
   .avatar-upload {
     flex-direction: column;
     align-items: center;
-    gap: 1.5rem;
+    justify-content: center;
+    gap: 0.75rem;
+    width: 100%;
   }
   
   .avatar-preview {
-    width: 90px;
-    height: 90px;
-    font-size: 1.1rem;
+    width: 80px;
+    height: 80px;
+    font-size: 1rem;
+    margin: 0 auto;
   }
 
   .avatar-controls {
-    position: static;
-    transform: none;
-    top: auto;
-    left: auto;
+    position: static !important;
+    transform: none !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    max-width: 280px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.3rem !important;
+    margin-top: 0 !important;
+    margin: 0 auto !important;
+  }
+
+  .avatar-buttons-group {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 0.2rem !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+    max-width: 250px !important;
+    margin: 0 auto !important;
+  }
+
+  .avatar-buttons-group .btn {
+    flex: 1 !important;
+    min-width: 0 !important;
+    flex-shrink: 1 !important;
+    white-space: nowrap !important;
+    padding: 0.35rem 0.5rem !important;
+    font-size: 0.7rem !important;
+    line-height: 1.2 !important;
+  }
+
+  .button-separator {
+    display: none !important;
+  }
+
+  .avatar-status {
+    display: none !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.25rem !important;
+    font-size: 0.7rem !important;
+    margin-top: 0.2rem !important;
+    margin: 0 auto !important;
+  }
+
+  .avatar-status.active {
+    display: flex !important;
   }
 }
 
@@ -1647,6 +1698,21 @@ footer {
 .btn-remove:hover {
   background: rgba(255, 77, 77, 0.1) !important;
   color: var(--color-malicious) !important;
+}
+
+.avatar-status {
+  display: none;
+  color: var(--accent-cyan);
+  font-size: 0.875rem;
+  font-weight: 500;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.avatar-status.active {
+  display: flex;
 }
 
 .avatar-fit-control {

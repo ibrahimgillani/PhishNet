@@ -206,7 +206,7 @@ class ReportsManager {
         return;
       }
 
-      const response = await fetch('/api/users/history?limit=100', {
+      const response = await fetch(getApiUrlWithParams(window.API_CONFIG.api.endpoints.users.history, { limit: 100 }), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

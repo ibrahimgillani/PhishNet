@@ -61,7 +61,7 @@
       const token = localStorage.getItem('token');
       const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-      const res = await fetch('/api/dashboard/security-tips', { headers });
+      const res = await fetch(getApiUrl(window.API_CONFIG.api.endpoints.dashboard.securityTips), { headers });
       if (!res.ok) {
         listEl.innerHTML = '<div style="color:#FFB3B3">Unable to load tips</div>';
         return;

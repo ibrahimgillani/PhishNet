@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:3000 https://localhost:3000 https://cdn.jsdelivr.net;">
   <title>About Us - PhishNet</title>
   <meta name="description" content="Learn about PhishNet's mission to protect users from phishing attacks with AI-powered detection technology.">
   
@@ -200,7 +201,9 @@
       // Fetch real analytics data from backend
       async function loadImpactStats() {
         try {
-          const response = await fetch('/api/analytics/platform-stats');
+          // Get API base URL from config.js or use localhost
+          const apiBase = (window.API_CONFIG && window.API_CONFIG.api.baseURL) || 'http://localhost:3000';
+          const response = await fetch(`${apiBase}/api/analytics/platform-stats`);
           
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -317,6 +320,7 @@
       © 2025 PhishNet. All rights reserved.
     </div>
   </footer>
+  <script src="config.js"></script>
   <script src="app.js"></script>
 
   <!-- PhishNet Chatbot Widget -->

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Scan Reports - PhishNet</title>
   <meta name="description" content="View detailed phishing scan reports with threat indicators and security recommendations.">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: https://feeds.feedburner.com https://www.bleepingcomputer.com https://*.thehackernews.com https://*.bleepstatic.com https://*.cloudfront.net https://*.akamaized.net https://*.cdn.net; connect-src 'self' https://cdn.jsdelivr.net https://feeds.feedburner.com https://www.bleepingcomputer.com https://api.allorigins.win; frame-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: https://feeds.feedburner.com https://www.bleepingcomputer.com https://*.thehackernews.com https://*.bleepstatic.com https://*.cloudfront.net https://*.akamaized.net https://*.cdn.net; connect-src 'self' http://localhost:3000 https://localhost:3000 https://cdn.jsdelivr.net https://feeds.feedburner.com https://www.bleepingcomputer.com https://api.allorigins.win; frame-src 'none'">>
   
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="shortcut icon" type="image/svg+xml" href="favicon.svg">
@@ -1145,6 +1145,7 @@
     </div>
   </div>
   <link rel="stylesheet" href="chatbot.css">
+  <script src="config.js"></script>
   <script src="scanning-system.js"></script>
   <script src="chatbot.js"></script>
 </body>

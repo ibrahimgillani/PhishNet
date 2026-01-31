@@ -6,7 +6,8 @@
 
 class BlogSystem {
   constructor() {
-    this.apiBase = '/api/blogs';
+    const baseUrl = (window.API_CONFIG && window.API_CONFIG.api.baseURL) || 'http://localhost:3000';
+    this.apiBase = `${baseUrl}/api/blogs`;
     this.currentCategory = 'all';
     this.allBlogs = [];
     this.filteredBlogs = [];

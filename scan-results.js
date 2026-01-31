@@ -93,7 +93,7 @@
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        const resp = await fetch('/api/users/history?limit=200', { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } });
+        const resp = await fetch(getApiUrlWithParams(window.API_CONFIG.api.endpoints.users.history, { limit: 200 }), { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } });
         if (resp.ok) {
           const data = await resp.json();
           if (data.success && Array.isArray(data.data.history)) {
@@ -252,7 +252,7 @@
       try {
         const resp = await fetch(`/api/scan/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } });
         if (resp.ok) {
-          const response = await fetch('/api/users/history?limit=200', { headers: { 'Authorization': `Bearer ${token}` } });
+          const response = await fetch(getApiUrlWithParams(window.API_CONFIG.api.endpoints.users.history, { limit: 200 }), { headers: { 'Authorization': `Bearer ${token}` } });
           if (response.ok) {
             const data = await response.json();
             scans = (data.data && data.data.history) ? data.data.history.map((item, idx) => ({ id: String(item._id), target: (String(item.scanType || '').toLowerCase().indexOf('email') !== -1) ? (item.senderEmail || item.email || item.url || '') : (item.url || item.value || ''), type: item.scanType, result: mapThreatLevel(item.threatLevel), confidence: item.confidence, date: new Date(item.checkedAt).toLocaleDateString(), time: new Date(item.checkedAt).toLocaleTimeString(), raw: item })) : [];
