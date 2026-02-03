@@ -1,10 +1,14 @@
 // ==================== APPLICATION CONFIGURATION ====================
 // This file contains all configuration for the frontend application
 
-// API Base URL - Can be overridden by setting window.API_BASE_URL before loading this script
-// For local development: http://localhost:3000
-// For production: Update this URL for your deployed backend
+// ==================== ENVIRONMENT CONFIGURATION ====================
+// Change this URL based on your environment:
+// - Development: http://localhost:3000
+// - Production: https://phishnet-backend-5eqv.onrender.com
 const API_BASE_URL = window.API_BASE_URL || 'https://phishnet-backend-5eqv.onrender.com';
+
+// For local development, uncomment the line below:
+// const API_BASE_URL = window.API_BASE_URL || 'http://localhost:3000';
 
 // Export configuration object
 const config = {

@@ -208,6 +208,7 @@ class ReportsManager {
 
       const response = await fetch(getApiUrlWithParams(window.API_CONFIG.api.endpoints.users.history, { limit: 100 }), {
         method: 'GET',
+        credentials: 'include',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
