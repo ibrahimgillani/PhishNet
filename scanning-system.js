@@ -234,7 +234,9 @@ class ScanningSystem {
     if (token) {
       // Logged-in user: send scan to server so it's stored under the user's account
       try {
-        const endpoint = (String(scan.type || '').toLowerCase().includes('email')) ? '/api/scan/email' : '/api/scan/url';
+        const endpoint = (String(scan.type || '').toLowerCase().includes('email')) 
+          ? getApiUrl(window.API_CONFIG.api.endpoints.scan.email)
+          : getApiUrl(window.API_CONFIG.api.endpoints.scan.url);
 
         // Build an enriched body containing analysis fields so server persists UI classification
         // Normalize frontend threat labels to server-expected enums to avoid validation errors
@@ -258,8 +260,20 @@ class ScanningSystem {
           domain: scan.domain || null
         };
 
+        // Extract sender email from email content if not provided
+        const extractSenderEmail = (text) => {
+          if (!text) return '';
+          const emailRegex = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+          const match = String(text).match(emailRegex);
+          return match ? match[0] : '';
+        };
+
         const body = (String(scan.type || '').toLowerCase().includes('email'))
-          ? Object.assign({}, commonAnalysis, { senderEmail: scan.senderEmail || scan.value || 'unknown@local', emailContent: scan.value || '', subject: scan.subject || '' })
+          ? Object.assign({}, commonAnalysis, { 
+              senderEmail: scan.senderEmail || extractSenderEmail(scan.value) || 'unknown@local', 
+              emailContent: scan.value || '', 
+              subject: scan.subject || '' 
+            })
           : Object.assign({}, commonAnalysis, { url: scan.value });
 
         const response = await fetch(endpoint, {
@@ -406,7 +420,7 @@ class ScanningSystem {
    * Call backend Safe Browsing endpoint
    */
   async scanUrlViaBackend(url) {
-    console.log('[scanUrlViaBackend] Sending scan request', { url });
+    console.log('[scanUrlViaBackend] Sending scan request', { url, urlType: typeof url, urlLength: url?.length });
     const token = localStorage.getItem('token');
     const response = await fetch(getApiUrl(window.API_CONFIG.api.endpoints.scan.url), {
       method: 'POST',
@@ -420,6 +434,7 @@ class ScanningSystem {
     const data = await response.json().catch(() => ({}));
     console.log('[scanUrlViaBackend] Response received', { status: response.status, ok: response.ok, data });
     if (!response.ok || data.success === false) {
+      console.error('[scanUrlViaBackend] Error details:', data);
       throw new Error(data?.message || 'Failed to scan URL');
     }
 
@@ -441,19 +456,22 @@ class ScanningSystem {
     const riskLevel = status === 'malicious' ? 'High' : status === 'suspicious' ? 'Medium' : 'Low';
     const riskPercent = status === 'malicious' ? 95 : status === 'suspicious' ? 55 : 5;
     
-    // Generate professional, detailed summaries
-    const summary = status === 'safe'
+      // Use summary from API if available, otherwise generate it
+      const summary = apiResult?.summary || (status === 'safe'
       ? 'Our comprehensive security analysis has completed a thorough examination of this URL and found no indicators of malicious activity, phishing attempts, or unwanted software. The URL has passed all security checks including domain reputation analysis, SSL certificate validation, and behavioral pattern matching. This resource appears legitimate and safe for user interaction.'
       : status === 'malicious'
         ? `This URL has been identified as a significant security threat and presents serious risks to users. Our advanced threat detection algorithms have flagged this resource for ${hasMalware ? 'malware distribution' : ''}${hasMalware && hasPhishing ? ' and ' : ''}${hasPhishing ? 'phishing attempts designed to steal credentials' : ''}. We strongly recommend avoiding this URL entirely and blocking access through your security systems. Do not enter personal information, credentials, or download any files from this source.`
-        : `This URL exhibits suspicious characteristics that warrant extreme caution. Our security analysis has detected ${hasUnwanted ? 'unwanted software patterns' : 'anomalous behavior'} commonly associated with potentially harmful activities. While not definitively malicious, this resource shows signs of deceptive practices, unusual redirect patterns, or attempts to deliver unwanted content. We recommend thorough verification before interacting with this URL.`;
+          : `This URL exhibits suspicious characteristics that warrant extreme caution. Our security analysis has detected ${hasUnwanted ? 'unwanted software patterns' : 'anomalous behavior'} commonly associated with potentially harmful activities. While not definitively malicious, this resource shows signs of deceptive practices, unusual redirect patterns, or attempts to deliver unwanted content. We recommend thorough verification before interacting with this URL.`);
     
-    const issues = hasThreats
+      // Use issues from API if available, otherwise generate them
+      const issues = apiResult?.issues || (hasThreats
       ? threatList.map((t) => `Flagged for ${String(t.type || t.threatType || 'THREAT').replace(/_/g, ' ')}`)
-      : ['No security threats detected'];
-    const indicators = hasThreats
+        : ['No security threats detected']);
+      
+      // Use indicators from API if available, otherwise generate them
+      const indicators = apiResult?.indicators || (hasThreats
       ? threatList.map((t) => `${String(t.platform || t.platformType || 'ANY_PLATFORM').replace(/_/g, ' ')} · ${String(t.type || t.threatType || 'THREAT').replace(/_/g, ' ')}`)
-      : ['Security analysis completed - No threats identified'];
+        : ['Security analysis completed - No threats identified']);
 
     return {
       status,
@@ -464,11 +482,11 @@ class ScanningSystem {
       issues,
       indicators,
       summary,
-      confidence: status === 'safe' ? 90 : 98,
+        confidence: apiResult?.confidence || (status === 'safe' ? 90 : 98),
       scanTime: ((elapsedMs || 0) / 1000).toFixed(2),
       domain: this.extractDomainSafe(url),
       rawThreats: threatList,
-      isSafe: status === 'safe',
+        isSafe: apiResult?.isSafe !== undefined ? apiResult.isSafe : (status === 'safe'),
     };
   }
 
@@ -987,7 +1005,8 @@ class ScanningSystem {
     if (token) {
       // Try to delete on server for logged-in users
       try {
-        const response = await fetch(`/api/scan/${id}`, {
+        const deleteUrl = getApiUrl(`/api/scan/${id}`);
+        const response = await fetch(deleteUrl, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
@@ -996,18 +1015,20 @@ class ScanningSystem {
         });
 
         if (response.ok) {
-          await this.loadScanHistory();
-          this.updateDashboardTable();
-          const storedSelected = localStorage.getItem('selectedScanId');
-          if (storedSelected && String(storedSelected) === String(id)) {
-            localStorage.removeItem('selectedScanId');
-            localStorage.removeItem('selectedScan');
+          const data = await response.json();
+          if (data.success) {
+            await this.loadScanHistory();
+            this.updateDashboardTable();
+            const storedSelected = localStorage.getItem('selectedScanId');
+            if (storedSelected && String(storedSelected) === String(id)) {
+              localStorage.removeItem('selectedScanId');
+              localStorage.removeItem('selectedScan');
+            }
+            this.showNotification('Report deleted', 'info');
+            return;
           }
-          this.showNotification('Report deleted', 'info');
-          return;
-        } else {
-          console.warn('[ScanningSystem] Server failed to delete scan, falling back to local remove');
         }
+        console.warn('[ScanningSystem] Server failed to delete scan, falling back to local remove');
       } catch (err) {
         console.error('[ScanningSystem] Error deleting scan on server, falling back to local remove', err);
       }
@@ -1031,23 +1052,19 @@ class ScanningSystem {
 
       const overlay = document.createElement('div');
       overlay.className = 'delete-confirm-overlay';
+      overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999;';
 
       overlay.innerHTML = `
-        <div class="delete-confirm-modal">
-          <div class="delete-confirm-header">
-            <div class="delete-confirm-icon">!</div>
-            <div>
-              <h3 class="delete-confirm-title">Delete this report?</h3>
-              <p class="delete-confirm-subtext">This action cannot be undone.</p>
-            </div>
+        <div class="delete-confirm-modal" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 2rem; max-width: 400px; color: white;">
+          <div style="text-align: center; margin-bottom: 1.5rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+            <h3 style="margin: 0 0 0.5rem 0; font-size: 1.25rem;">Delete this report?</h3>
+            <p style="margin: 0; color: var(--text-muted); font-size: 0.875rem;">This action cannot be undone.</p>
           </div>
-          <div class="delete-confirm-body">
-            <p class="delete-confirm-message">You are about to remove <span class="delete-confirm-highlight">${this.escapeHtml(targetText)}</span> from your history.</p>
-            <p class="delete-confirm-note">If you need this later, export it before deleting.</p>
-          </div>
-          <div class="delete-confirm-actions">
-            <button type="button" class="modal-btn secondary">Cancel</button>
-            <button type="button" class="modal-btn danger">Yes, delete</button>
+          <p style="margin: 1rem 0; color: var(--text-muted); font-size: 0.875rem;">You are about to remove <strong>${this.escapeHtml(targetText)}</strong> from your history.</p>
+          <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button class="modal-btn secondary" style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); background: transparent; color: white; border-radius: var(--radius-sm); cursor: pointer;">Cancel</button>
+            <button class="modal-btn danger" style="padding: 0.5rem 1rem; background: #ff4d4d; border: none; color: white; border-radius: var(--radius-sm); cursor: pointer;">Delete</button>
           </div>
         </div>
       `;
@@ -1245,6 +1262,15 @@ class ScanningSystem {
    * Generate report HTML
    */
   generateReportHTML(scan, isMain = false) {
+    // Debug logging to check scan data
+    console.log('[generateReportHTML] Scan data:', {
+      hasSummary: !!scan.summary,
+      hasRawSummary: !!(scan.raw && scan.raw.summary),
+      summary: scan.summary,
+      rawSummary: scan.raw?.summary,
+      scan
+    });
+    
     const threatColors = {
       safe: '#00FF88',
       suspicious: '#FFC107',
@@ -1451,7 +1477,7 @@ class ScanningSystem {
 
         <div class="summary-box">
           <h3 class="section-title">Summary</h3>
-          <p class="summary-text">${this.escapeHtml(scan.summary || 'No summary available')}</p>
+          <p class="summary-text">${this.escapeHtml(scan.summary || scan.raw?.summary || 'No summary available')}</p>
         </div>
 
       </div>

@@ -342,6 +342,10 @@ class ReportsManager {
     const mainReport = document.getElementById('main-report');
     const recentScansList = document.getElementById('recent-scans-list');
 
+    // Clear container immediately before rendering
+    mainReport.innerHTML = '';
+    recentScansList.innerHTML = '';
+
     if (this.scanHistory.length === 0) {
       // Show empty state
       mainReport.innerHTML = `
@@ -355,20 +359,24 @@ class ReportsManager {
           <p>Perform your first scan on the <a href="index.html">homepage</a> to view reports.</p>
         </div>
       `;
-      recentScansList.innerHTML = '';
       return;
     }
 
-    // Set current report to latest scan
-    this.currentReport = this.scanHistory[0];
+    // Set current report to latest scan if not already set (from URL or localStorage)
+    if (!this.currentReport) {
+      this.currentReport = this.scanHistory[0];
+    }
+
+    // Show loading state briefly while rendering
+    mainReport.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Loading report...</div>';
 
     // Render main report
     // TRACE: main report render
     try { console.log('[ReportsManager][TRACE] renderMainReport', { reportId: this.currentReport && (this.currentReport.id || this.currentReport._id || '(no-id)'), isEmailType: String(this.currentReport.type||'').toLowerCase().includes('email'), displayTarget: this.getDisplayTarget(this.currentReport), valueLength: this.currentReport && this.currentReport.value ? String(this.currentReport.value).length : 0 }); } catch (e) {}
     this.renderMainReport(this.currentReport, mainReport);
 
-    // Render recent scans sidebar (previous 3 scans)
-    const recentScans = this.scanHistory.slice(1, 4);
+    // Render recent scans sidebar (previous 3 unique scans)
+    const recentCandidates = this.scanHistory.slice(1);
     const extractEmail = (text) => {
       if (!text) return '';
       try {
@@ -386,20 +394,53 @@ class ReportsManager {
       } catch (e) { return ''; }
     };
 
+    const normalizeRecentKey = (scan) => {
+      try {
+        const typeStr = String(scan.type || '').toLowerCase();
+        const cleanedFromSender = extractEmail(scan.senderEmail) || '';
+        const cleanedFromValue = extractEmail(scan.value) || '';
+        const isEmail = typeStr.includes('email') || cleanedFromSender !== '' || cleanedFromValue !== '';
+        if (isEmail) {
+          const emailTarget = (cleanedFromSender || cleanedFromValue || '').trim().toLowerCase();
+          if (emailTarget) return `email::${emailTarget}`;
+          if (scan.id || scan._id) return `email::${scan.id || scan._id}`;
+          return null;
+        }
+        const rawTarget = String(this.getDisplayTarget ? this.getDisplayTarget(scan) : (scan.value || scan.url || '')).trim().toLowerCase();
+        if (!rawTarget) return null;
+        return `url::${rawTarget}`;
+      } catch (e) {
+        return null;
+      }
+    };
+
+    // Show recent 4 scans without deduplication (allow repeated URLs/emails at different times)
+    const recentScans = recentCandidates.slice(0, 4);
+
     const recentItemsHtml = recentScans.map((scan, index) => {
       // Determine email-ness by type OR presence of an email address in sender/value
       const typeStr = String(scan.type || '').toLowerCase();
       const cleanedFromSender = extractEmail(scan.senderEmail) || '';
       const cleanedFromValue = extractEmail(scan.value) || '';
       const isEmail = typeStr.includes('email') || cleanedFromSender !== '' || cleanedFromValue !== '';
-      // Prefer centralized getDisplayTarget so placeholder logic is consistent across UI
-      const PLACEHOLDER_SENDER = 'Undefined User';
-      const rawTarget = String(this.getDisplayTarget ? this.getDisplayTarget(scan) : (cleanedFromSender || cleanedFromValue || scan.value || scan.url || ''));
-      const displayValue = isEmail ? (rawTarget || PLACEHOLDER_SENDER) : this.truncate(rawTarget || scan.value || '', 25);
+      
+      const PLACEHOLDER_SENDER = 'Unknown User';
+      let displayValue;
+      
+      if (isEmail) {
+        // For email: show ONLY the extracted email or placeholder - NEVER call getDisplayTarget
+        const emailAddress = cleanedFromSender || cleanedFromValue || '';
+        displayValue = this.truncate(emailAddress || PLACEHOLDER_SENDER, 30);
+      } else {
+        // For URL: show the URL directly
+        displayValue = this.truncate(String(scan.value || scan.url || ''), 30);
+      }
+      
       try { console.log('[ReportsManager][TRACE] recent scan', { index, id: scan.id || '(no-id)', isEmail, displayValue, valueLength: scan && scan.value ? String(scan.value).length : 0 }); } catch (e) {}
       const threatClass = this.getThreatClass(scan.threat);
+      const isActive = this.currentReport && String(this.currentReport.id) === String(scan.id);
       return `
-      <div class="scan-preview ${index === 0 ? 'active' : ''}" data-scan-id="${scan.id}" style="display:flex; align-items:center; gap:10px;">
+      <div class="scan-preview ${isActive ? 'active' : ''}" data-scan-id="${scan.id}" style="display:flex; align-items:center; gap:10px;">
         <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
           <div style="width:34px; height:34px; display:flex; align-items:center; justify-content:center; border-radius:6px; background:${this.getThreatColor(scan.threat)}; color:#fff; font-weight:700;">${scan.threat === 'safe' ? '✓' : scan.threat === 'suspicious' ? '⚠' : '✕'}</div>
           <span class="badge ${threatClass}" style="font-size:0.7rem; padding:4px 6px; display:block;">${(scan.threat||'').toUpperCase()}</span>
@@ -412,12 +453,8 @@ class ReportsManager {
     `;
     }).join('');
 
-    // Wrap recent items in a compact card to preserve alignment and structure
-    recentScansList.innerHTML = `
-      <div style="padding:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); display:flex; flex-direction:column; gap:10px;">
-        ${recentItemsHtml}
-      </div>
-    `;
+    // Render recent items in a simple list container to avoid nested card visuals
+    recentScansList.innerHTML = recentItemsHtml;
 
     // Attach event listeners to preview cards
     const previewCards = recentScansList.querySelectorAll('.scan-preview');
@@ -448,6 +485,27 @@ class ReportsManager {
       styleEl.id = 'reports-download-btn-style';
       styleEl.textContent = `
         .download-report-btn:hover { background: #0952b8 !important; }
+        .delete-report-btn:hover { background: #e63946 !important; }
+        @keyframes slideIn {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        @keyframes slideOut {
+          from {
+            transform: translateX(0);
+            opacity: 1;
+          }
+          to {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+        }
       `;
       document.head.appendChild(styleEl);
     }
@@ -489,28 +547,37 @@ class ReportsManager {
     container.innerHTML = `
       <div class="card results-card" style="margin-bottom: 2rem;">
         <div class="card-header">
-          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
-            <div style="display:flex; align-items:center; gap:1rem;">
-              <div>
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+            <div style="display:flex; align-items:flex-start; gap:1rem; flex: 1;">
+              <div style="flex: 1;">
                 <h2 class="card-title" style="margin: 0;">${report.type === 'url' ? 'URL' : 'Email'} Scan Report</h2>
                 <p style="font-size:0.875rem; color: var(--text-muted); margin: 4px 0 0 0;">${report.type === 'url' ? 'Scanned URL' : 'Scanned Email'}</p>
                 <p style="font-family: monospace; font-size: 0.875rem; color: white; margin: 0; word-break: break-all;">${this.escapeHtml(this.getDisplayTarget(report))}</p>
               </div>
+            </div>
 
-              <div style="margin-left:auto; display:flex; align-items:center; gap:0.75rem;">
-                <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
-                  <div class="status-icon ${report.threat || ''}" style="width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; background: ${statusBg}; border: 2px solid ${statusColor};">
-                    <div class="status-icon-symbol" style="font-size:18px; color: #ffffff !important;">${statusSymbol}</div>
-                  </div>
-                  <span class="badge ${threatClass}" style="display:block; margin-top:6px; font-size:0.85rem; padding:6px 8px;">${(report.threat||'').toUpperCase()}</span>
+            <div style="display:flex; align-items:center; gap:0.75rem; margin-left: auto;">
+              <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+                <div class="status-icon ${report.threat || ''}" style="width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; background: ${statusBg}; border: 2px solid ${statusColor};">
+                  <div class="status-icon-symbol" style="font-size:18px; color: #ffffff !important;">${statusSymbol}</div>
                 </div>
-                <button id="download-report-btn" class="icon-button download-report-btn" style="background: var(--primary); color: white; border: none; padding: 0.5rem; border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.3s ease;" title="Download as PDF">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7 10 12 15 17 10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-              </button>
+                <span class="badge ${threatClass}" style="display:block; margin-top:6px; font-size:0.85rem; padding:6px 8px;">${(report.threat||'').toUpperCase()}</span>
+              </div>
+              <button id="download-report-btn" class="icon-button download-report-btn" style="background: var(--primary); color: white; border: none; padding: 0.5rem; border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.3s ease;" title="Download as PDF">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </button>
+            <button id="delete-report-btn" class="icon-button delete-report-btn" style="background: #ff4d4d; color: white; border: none; padding: 0.5rem; border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.3s ease;" title="Delete report">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+            </button>
             </div>
           </div>
         </div>
@@ -618,10 +685,130 @@ class ReportsManager {
 
   setupEventListeners() {
     const downloadBtn = document.getElementById('download-report-btn');
+    const deleteBtn = document.getElementById('delete-report-btn');
 
     if (downloadBtn) {
       downloadBtn.onclick = () => this.exportReport();
     }
+
+    if (deleteBtn) {
+      deleteBtn.onclick = () => this.deleteCurrentReport();
+    }
+  }
+
+  async deleteCurrentReport() {
+    if (!this.currentReport) return;
+    
+    const label = String(this.currentReport.type || '').toLowerCase().includes('email') 
+      ? (this.currentReport.senderEmail || this.currentReport.value || 'this email')
+      : (this.currentReport.value || this.currentReport.url || 'this URL');
+    
+    const confirmed = await this.confirmDeletion(label);
+    if (!confirmed) return;
+
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const deleteUrl = `${config.api.baseURL}/api/scan/${this.currentReport.id}`;
+        const response = await fetch(deleteUrl, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            // Reload history and re-render
+            await this.loadScanHistory();
+            this.renderReports();
+            this.showNotification('Report deleted', 'info');
+            return;
+          }
+        }
+        console.warn('[ReportsManager] Server failed to delete scan');
+        this.showNotification('Failed to delete report', 'error');
+      } catch (err) {
+        console.error('[ReportsManager] Error deleting scan:', err);
+        this.showNotification('Failed to delete report', 'error');
+      }
+    }
+  }
+
+  async confirmDeletion(targetText) {
+    return new Promise((resolve) => {
+      const existing = document.querySelector('.delete-confirm-overlay');
+      if (existing) existing.remove();
+
+      const overlay = document.createElement('div');
+      overlay.className = 'delete-confirm-overlay';
+      overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999;';
+
+      overlay.innerHTML = `
+        <div class="delete-confirm-modal" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 2rem; max-width: 400px; color: white;">
+          <div style="text-align: center; margin-bottom: 1.5rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+            <h3 style="margin: 0 0 0.5rem 0; font-size: 1.25rem;">Delete this report?</h3>
+            <p style="margin: 0; color: var(--text-muted); font-size: 0.875rem;">This action cannot be undone.</p>
+          </div>
+          <p style="margin: 1rem 0; color: var(--text-muted); font-size: 0.875rem;">You are about to remove <strong>${this.escapeHtml(targetText)}</strong> from your history.</p>
+          <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button class="modal-btn secondary" style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); background: transparent; color: white; border-radius: var(--radius-sm); cursor: pointer;">Cancel</button>
+            <button class="modal-btn danger" style="padding: 0.5rem 1rem; background: #ff4d4d; border: none; color: white; border-radius: var(--radius-sm); cursor: pointer;">Delete</button>
+          </div>
+        </div>
+      `;
+
+      const modal = overlay.querySelector('.delete-confirm-modal');
+      const cancelBtn = overlay.querySelector('.modal-btn.secondary');
+      const deleteBtn = overlay.querySelector('.modal-btn.danger');
+
+      const cleanup = (result) => {
+        overlay.remove();
+        document.removeEventListener('keydown', onKey);
+        resolve(result);
+      };
+
+      const onKey = (e) => {
+        if (e.key === 'Escape') cleanup(false);
+        if (e.key === 'Enter') cleanup(true);
+      };
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) cleanup(false);
+      });
+
+      cancelBtn.addEventListener('click', () => cleanup(false));
+      deleteBtn.addEventListener('click', () => cleanup(true));
+
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(overlay);
+      deleteBtn.focus();
+    });
+  }
+
+  showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: ${type === 'error' ? '#ff4d4d' : type === 'success' ? '#00ff88' : '#0b63d9'};
+      color: white;
+      padding: 1rem 1.5rem;
+      border-radius: var(--radius-md);
+      z-index: 10000;
+      animation: slideIn 0.3s ease;
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      notification.style.animation = 'slideOut 0.3s ease';
+      setTimeout(() => notification.remove(), 300);
+    }, 3000);
   }
 
   exportReport() {

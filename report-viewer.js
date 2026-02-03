@@ -116,6 +116,15 @@ class ReportViewer {
         issues = issues.map(i => this.sanitizeValue(i)).filter(i => i !== null);
         const summary = this.sanitizeValue(item.summary) || this.sanitizeValue(item.analysis && item.analysis.summary) || this.sanitizeValue(item.details) || '';
 
+        // Debug log to check summary
+        console.log('[ReportViewer] Processing item:', {
+          id: item._id,
+          hasSummary: !!item.summary,
+          summary: item.summary,
+          hasAnalysisSummary: !!(item.analysis && item.analysis.summary),
+          hasDetails: !!item.details
+        });
+
         // derive readable risk level if missing
         const deriveRisk = (rl, thr, rawThreatLevel) => {
           if (rl) return rl;
@@ -155,6 +164,13 @@ class ReportViewer {
         return;
       }
 
+      console.log('[ReportViewer] Rendering server report:', {
+        id: report.id,
+        hasSummary: !!report.summary,
+        summary: report.summary,
+        fullReport: report
+      });
+
       this.currentReport = report;
       this.renderReport(report);
       this.setupActionButtons();
@@ -178,6 +194,14 @@ class ReportViewer {
         this.showEmptyState('Report not found. It may have been deleted.');
         return;
       }
+
+      console.log('[ReportViewer] Rendering localStorage report:', {
+        id: report.id,
+        hasSummary: !!report.summary,
+        summary: report.summary,
+        fullReport: report
+      });
+
       this.currentReport = report;
       this.renderReport(report);
       this.setupActionButtons();

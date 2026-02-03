@@ -511,8 +511,24 @@ function showNotification(message, type = 'info') {
   }, 3000);
 }
 
+// Check authentication status
+function checkAuth() {
+  const token = localStorage.getItem(tokenKey);
+  if (!token) {
+    // Not logged in, redirect to login page
+    window.location.href = 'login.html?redirect=settings.html';
+    return false;
+  }
+  return true;
+}
+
 // Initialize page on DOMContentLoaded
 window.addEventListener('DOMContentLoaded', async () => {
+  // Check if user is logged in first
+  if (!checkAuth()) {
+    return; // Stop execution if not authenticated
+  }
+
   // Use Promise.all to parallelize independent API calls and local storage loads
   // This makes the page feel much faster
   try {

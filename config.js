@@ -3,8 +3,8 @@
 
 // API Base URL - Can be overridden by setting window.API_BASE_URL before loading this script
 // For local development: http://localhost:3000
-// For production: Update this URL or set window.API_BASE_URL in your HTML
-const API_BASE_URL = window.API_BASE_URL || 'http://localhost:3000';
+// For production: Update this URL for your deployed backend
+const API_BASE_URL = window.API_BASE_URL || 'https://phishnet-backend-5eqv.onrender.com';
 
 // Export configuration object
 const config = {
@@ -28,7 +28,7 @@ const config = {
       },
       // Scanning
       scan: {
-        url: '/api/scan/url',
+        url: '/api/scan-url',
         email: '/api/scan/email',
         domain: '/api/scan/domain'
       },

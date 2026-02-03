@@ -1908,6 +1908,8 @@ class FormManager {
 
       auth.login(finalEmail, pwdVal)
         .then(() => {
+          // Clear guest scan history on successful login
+          localStorage.removeItem('scanHistory');
           showToast('Login successful!', 'success');
           setTimeout(() => {
             window.location.href = 'dashboard.html';

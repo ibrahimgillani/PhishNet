@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Scan Reports - PhishNet</title>
   <meta name="description" content="View detailed phishing scan reports with threat indicators and security recommendations.">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: https://feeds.feedburner.com https://www.bleepingcomputer.com https://*.thehackernews.com https://*.bleepstatic.com https://*.cloudfront.net https://*.akamaized.net https://*.cdn.net; connect-src 'self' http://localhost:3000 https://localhost:3000 https://cdn.jsdelivr.net https://feeds.feedburner.com https://www.bleepingcomputer.com https://api.allorigins.win; frame-src 'none'">>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: https://feeds.feedburner.com https://www.bleepingcomputer.com https://*.thehackernews.com https://*.bleepstatic.com https://*.cloudfront.net https://*.akamaized.net https://*.cdn.net; connect-src 'self' http://localhost:3000 https://localhost:3000 https://cdn.jsdelivr.net https://phishnet-backend-5eqv.onrender.com https://feeds.feedburner.com https://www.bleepingcomputer.com https://api.allorigins.win; frame-src 'none'">
   
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="shortcut icon" type="image/svg+xml" href="favicon.svg">
@@ -1084,6 +1087,16 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
   <!-- Cache-buster added during debugging to force fresh JS load -->
+  <script>
+    // Check authentication before loading page
+    (function() {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        // Not logged in, redirect to login page
+        window.location.href = 'login.html?redirect=reports.html';
+      }
+    })();
+  </script>
   <script src="app.js?v=20260124.1"></script>
   <script src="reports.js?v=20260124.1"></script>
 
@@ -1146,7 +1159,6 @@
   </div>
   <link rel="stylesheet" href="chatbot.css">
   <script src="config.js"></script>
-  <script src="scanning-system.js"></script>
   <script src="chatbot.js"></script>
 </body>
 </html>
