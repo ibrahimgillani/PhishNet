@@ -87,6 +87,10 @@ class AuthManager {
         localStorage.removeItem('selectedScanId');
         // Clear any guest scan history to avoid leaking previous anonymous scans
         localStorage.removeItem('scanHistory');
+        
+        // Sync token to browser extension if available
+        this.syncTokenToExtension(data.data.token);
+        
         const user = {
           email: data.data.user.email,
           firstName: data.data.user.firstName,
@@ -112,6 +116,31 @@ class AuthManager {
         throw new Error(data.message || 'Login failed');
       }
     });
+  }
+
+  // Sync authentication token to browser extension
+  syncTokenToExtension(token) {
+    try {
+      // Try to communicate with the extension via postMessage or chrome runtime
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+        // Direct extension communication (if extension ID is known)
+        chrome.runtime.sendMessage({ type: 'phishnet.sync-token', token: token }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.log('[PhishNet] Extension not available for token sync');
+          } else {
+            console.log('[PhishNet] Token synced to extension');
+          }
+        });
+      }
+      
+      // Also broadcast via custom event for content scripts
+      window.dispatchEvent(new CustomEvent('phishnet-token-sync', { detail: { token } }));
+      
+      // Store in a way the extension can access
+      localStorage.setItem('phishnetToken', token || '');
+    } catch (e) {
+      console.log('[PhishNet] Extension sync not available:', e.message);
+    }
   }
 
   logout() {
@@ -142,6 +171,11 @@ class AuthManager {
         // Remove auth token and any cached scan history
         localStorage.removeItem('token');
         localStorage.removeItem('scanHistory');
+        localStorage.removeItem('phishnetToken');
+        
+        // Clear token from extension
+        this.syncTokenToExtension(null);
+        
         // Clear any in-memory scan manager
         if (window.scanManager && Array.isArray(window.scanManager.scanHistory)) {
           window.scanManager.scanHistory = [];
@@ -772,7 +806,7 @@ class ScanManager {
     });
   }
 
-  handleScan(input, type) {
+  async handleScan(input, type) {
     const value = input.value.trim();
 
     if (!value) {
@@ -792,14 +826,133 @@ class ScanManager {
     // Show scanning notification
     this.showNotification('Scanning ' + type + '...', 'info');
 
-    // Simulate scan
-    setTimeout(() => {
-      const result = this.simulateScan(value, type);
+    try {
+      // Call real backend API
+      console.log('🔍 Calling backend API for', type, 'scan...');
+      const result = await this.callBackendScan(value, type);
+      console.log('✅ Backend response:', result);
       auth.incrementScanCount();
       this.showScanResult(result);
       this.saveScanReport(result);
       this.displayScanHistory();
-    }, 1000);
+    } catch (error) {
+      console.error('❌ Scan error:', error);
+      console.error('Error details:', error.message, error.stack);
+      // Fallback to simulated scan if backend unavailable
+      this.showNotification('Backend unavailable - Using offline mode...', 'warning');
+      setTimeout(() => {
+        const result = this.simulateScan(value, type);
+        auth.incrementScanCount();
+        this.showScanResult(result);
+        this.saveScanReport(result);
+        this.displayScanHistory();
+      }, 500);
+    }
+  }
+
+  async callBackendScan(value, type) {
+    const API_BASE = window.API_CONFIG?.api?.baseURL || window.CONFIG?.API_BASE_URL || 'http://localhost:3000';
+    
+    if (type === 'email') {
+      const response = await fetch(`${API_BASE}/api/scan/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailContent: value })
+      });
+      
+      if (!response.ok) throw new Error('API request failed');
+      
+      const data = await response.json();
+      
+      // Convert backend response to UI format
+      const isPhishing = data.classification === 'phishing';
+      const threat = isPhishing ? (data.confidence > 0.8 ? 'malicious' : 'suspicious') : 'safe';
+      
+      return {
+        type: 'email',
+        value: value.substring(0, 100) + (value.length > 100 ? '...' : ''),
+        threat,
+        confidence: data.confidence * 100,
+        timestamp: new Date().toISOString(),
+        indicators: data.indicators || [],
+        issues: isPhishing ? 
+          ['⚠ Phishing detected', `⚠ Confidence: ${(data.confidence * 100).toFixed(1)}%`] :
+          ['✓ Email appears safe', '✓ No phishing indicators'],
+        summary: isPhishing ?
+          `WARNING: This email appears to be a phishing attempt (${(data.confidence * 100).toFixed(1)}% confidence). ${data.indicators?.join('. ') || 'Be cautious with this email.'}` :
+          'This email appears to be legitimate. No phishing indicators were detected.',
+        riskLevel: threat === 'safe' ? 'Low' : threat === 'suspicious' ? 'Medium' : 'High',
+        scanDetails: {
+          model: data.model || 'PhishingDistilBERT',
+          phishingScore: data.confidence * 100
+        }
+      };
+    } else if (type === 'url') {
+      const response = await fetch(`${API_BASE}/api/scan/scan-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: value })
+      });
+      
+      if (!response.ok) throw new Error('API request failed');
+      
+      const result = await response.json();
+      const data = result.data || result; // Handle nested data structure
+      
+      // New advanced URL scanner response format
+      const isPhishing = data.isPhishing === true;
+      const riskScore = data.riskScore || 0;
+      const riskLevel = data.riskLevel || 'low';
+      
+      // Determine threat level based on risk
+      let threat = 'safe';
+      if (riskLevel === 'critical' || riskLevel === 'high') {
+        threat = 'malicious';
+      } else if (riskLevel === 'medium') {
+        threat = 'suspicious';
+      }
+      
+      // Build issues from risk factors
+      const riskFactors = data.riskFactors || [];
+      const safetyIndicators = data.safetyIndicators || [];
+      
+      const issues = isPhishing || riskFactors.length > 0
+        ? riskFactors.map(f => `⚠ ${f}`)
+        : safetyIndicators.length > 0 
+          ? safetyIndicators.map(s => `✓ ${s}`)
+          : ['✓ URL appears safe', '✓ No phishing indicators'];
+      
+      // Build summary
+      let summary = '';
+      if (isPhishing) {
+        summary = `WARNING: This URL is likely a phishing attempt! Risk Score: ${riskScore.toFixed(0)}%. ${riskFactors.slice(0, 3).join('. ')}.`;
+      } else if (riskLevel === 'medium') {
+        summary = `This URL shows some warning signs. Risk Score: ${riskScore.toFixed(0)}%. Exercise caution.`;
+      } else {
+        summary = 'This URL appears to be legitimate and safe to visit.';
+      }
+      
+      return {
+        type: 'url',
+        value: value,
+        threat,
+        confidence: riskScore,
+        timestamp: data.timestamp || new Date().toISOString(),
+        indicators: riskFactors,
+        issues,
+        summary,
+        riskLevel: riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1),
+        scanDetails: {
+          model: data.mlAnalysis?.method || 'Advanced URL Scanner',
+          urlAnalysis: data.urlAnalysis,
+          domainAnalysis: data.domainAnalysis,
+          mlAnalysis: data.mlAnalysis,
+          scanTime: data.scanTime
+        }
+      };
+    }
+    
+    throw new Error('Unknown scan type');
   }
 
   simulateScan(value, type) {

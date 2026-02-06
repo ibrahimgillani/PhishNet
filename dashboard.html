@@ -111,12 +111,12 @@
         <h1 style="margin-bottom: 2rem;">Security Dashboard</h1>
 
         <!-- Stats Grid -->
-        <div class="grid grid-4" style="margin-bottom: 2rem;">
-          <div class="card">
+        <div class="grid grid-4 stats-grid" style="margin-bottom: 2rem;">
+          <div class="card" data-stat="total-scans">
             <div style="display: flex; align-items: center; justify-content: space-between;">
               <div>
                 <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Total Scans</p>
-                <h2 style="font-size: 2rem; margin: 0; color: white;">1,247</h2>
+                <h2 id="total-scans" style="font-size: 2rem; margin: 0; color: white;">0</h2>
               </div>
               <div style="width: 48px; height: 48px; background: rgba(255, 255, 255, 0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -126,11 +126,11 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" data-stat="threats-blocked">
             <div style="display: flex; align-items: center; justify-content: space-between;">
               <div>
                 <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Threats Blocked</p>
-                <h2 style="font-size: 2rem; margin: 0; color: #FF4D4D;">89</h2>
+                <h2 id="threats-blocked" style="font-size: 2rem; margin: 0; color: #FF4D4D;">0</h2>
               </div>
               <div style="width: 48px; height: 48px; background: rgba(255, 77, 77, 0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF4D4D" stroke-width="2">
@@ -142,11 +142,11 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" data-stat="safe-items">
             <div style="display: flex; align-items: center; justify-content: space-between;">
               <div>
                 <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Safe Items</p>
-                <h2 style="font-size: 2rem; margin: 0; color: #00FF88;">1,158</h2>
+                <h2 id="safe-items" style="font-size: 2rem; margin: 0; color: #00FF88;">0</h2>
               </div>
               <div style="width: 48px; height: 48px; background: rgba(0, 255, 136, 0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00FF88" stroke-width="2">
@@ -156,11 +156,11 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" data-stat="protection-rate">
             <div style="display: flex; align-items: center; justify-content: space-between;">
               <div>
                 <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Protection Rate</p>
-                <h2 style="font-size: 2rem; margin: 0; color: white;">92.8%</h2>
+                <h2 id="protection-rate" style="font-size: 2rem; margin: 0; color: white;">0%</h2>
               </div>
               <div style="width: 48px; height: 48px; background: rgba(255, 255, 255, 0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -364,10 +364,6 @@
       }
     })();
   </script>
-  <script src="app.js"></script>
-  <script src="chart-init.js"></script>
-  <script src="scanning-system.js"></script>
-  <script src="dashboard-security-tips.js"></script>
 
   <!-- PhishNet Chatbot Widget -->
   <div id="chatbot-container">
@@ -428,6 +424,11 @@
   </div>
   <link rel="stylesheet" href="chatbot.css">
   
+  <script src="app.js"></script>
+  <script src="chart-init.js"></script>
+  <script src="scanning-system.js"></script>
+  <script src="dashboard-data.js"></script>
+  <script src="dashboard-security-tips.js"></script>
   <script src="chatbot.js"></script>
 </body>
 </html>

@@ -1,0 +1,151 @@
+{
+  "info": {
+    "_postman_id": "phishnet-collection",
+    "name": "PhishNet API",
+    "description": "API collection for PhishNet - Phishing Detection System",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        },
+        "description": "Check if the backend server is running"
+      },
+      "response": []
+    },
+    {
+      "name": "Root Endpoint",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/",
+          "host": ["{{base_url}}"],
+          "path": [""]
+        },
+        "description": "Get API information"
+      },
+      "response": []
+    },
+    {
+      "name": "Scan URL",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"https://suspicious-login-page.com\",\n  \"subject\": \"Verify Your Account\",\n  \"body\": \"Click here to verify your credentials\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/scan/scan-url",
+          "host": ["{{base_url}}"],
+          "path": ["api", "scan", "scan-url"]
+        },
+        "description": "Scan a URL for phishing indicators"
+      },
+      "response": []
+    },
+    {
+      "name": "Scan Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"subject\": \"URGENT: Update Your Password Immediately\",\n  \"body\": \"Dear User,\\n\\nWe detected suspicious activity on your account. Click [LINK] to verify your identity and secure your account.\\n\\nRegards,\\nSecurity Team\",\n  \"sender\": \"security@example.com\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/scan/email",
+          "host": ["{{base_url}}"],
+          "path": ["api", "scan", "email"]
+        },
+        "description": "Scan an email for phishing"
+      },
+      "response": []
+    },
+    {
+      "name": "Scan Domain",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"domain\": \"suspicious-bank-login.com\",\n  \"context\": \"Email contained link to this domain asking to verify account credentials\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/scan/domain",
+          "host": ["{{base_url}}"],
+          "path": ["api", "scan", "domain"]
+        },
+        "description": "Scan a domain for phishing indicators"
+      },
+      "response": []
+    },
+    {
+      "name": "Batch Scan",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"emails\": [\n    {\n      \"subject\": \"Invoice #12345\",\n      \"body\": \"Please review the attached invoice for payment\"\n    },\n    {\n      \"subject\": \"URGENT ACTION REQUIRED\",\n      \"body\": \"Your account will be closed unless you verify [LINK] immediately\"\n    },\n    {\n      \"subject\": \"Your Monthly Statement\",\n      \"body\": \"Here is your bank statement for this month\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/scan/batch",
+          "host": ["{{base_url}}"],
+          "path": ["api", "scan", "batch"]
+        },
+        "description": "Scan multiple emails in batch"
+      },
+      "response": []
+    },
+    {
+      "name": "Get Model Info",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/scan/model-info",
+          "host": ["{{base_url}}"],
+          "path": ["api", "scan", "model-info"]
+        },
+        "description": "Get information about the loaded model"
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ]
+}

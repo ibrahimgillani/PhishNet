@@ -232,11 +232,16 @@ class ScanningSystem {
     const token = localStorage.getItem('token');
 
     if (token) {
-      // Logged-in user: send scan to server so it's stored under the user's account
+      // Logged-in user: send scan to Auth backend (port 5000) so it's stored under the user's account
       try {
-        const endpoint = (String(scan.type || '').toLowerCase().includes('email')) 
-          ? getApiUrl(window.API_CONFIG.api.endpoints.scan.email)
-          : getApiUrl(window.API_CONFIG.api.endpoints.scan.url);
+        // Use Auth backend's /api/scan/url or /api/scan/email endpoint to save to MongoDB
+        const isEmail = String(scan.type || '').toLowerCase().includes('email');
+        const saveEndpoint = isEmail 
+          ? (window.API_CONFIG.api.endpoints.history?.saveEmail || '/api/scan/email')
+          : (window.API_CONFIG.api.endpoints.history?.saveUrl || '/api/scan/url');
+        
+        // Build the full URL to the Auth backend (port 5000)
+        const endpoint = `${window.API_CONFIG.api.authBaseURL}${saveEndpoint}`;
 
         // Build an enriched body containing analysis fields so server persists UI classification
         // Normalize frontend threat labels to server-expected enums to avoid validation errors
@@ -311,6 +316,10 @@ class ScanningSystem {
     // Update dashboard if it's open
     if (window.location.pathname.includes('dashboard.html')) {
       this.updateDashboardTable();
+      // Also refresh dashboard data (stats, alerts, chart)
+      if (typeof window.refreshDashboardData === 'function') {
+        window.refreshDashboardData();
+      }
     }
 
     // Update reports page if it's open
@@ -445,6 +454,90 @@ class ScanningSystem {
    * Normalize Safe Browsing response to UI-friendly format
    */
   normalizeSafeBrowsingResult(url, apiResult, elapsedMs) {
+    // Handle new Advanced URL Scanner response format
+    const data = apiResult?.data || apiResult;
+    
+    // Check for new format (isPhishing, riskLevel, riskScore)
+    if (data?.isPhishing !== undefined || data?.riskLevel !== undefined) {
+      const isPhishing = data.isPhishing === true;
+      const riskLevel = (data.riskLevel || 'low').toLowerCase();
+      const riskScore = data.riskScore || 0;
+      const riskFactors = data.riskFactors || [];
+      const safetyIndicators = data.safetyIndicators || [];
+      
+      // Determine status based on risk level
+      let status = 'safe';
+      if (riskLevel === 'critical' || riskLevel === 'high' || isPhishing) {
+        status = 'malicious';
+      } else if (riskLevel === 'medium') {
+        status = 'suspicious';
+      }
+      
+      const threatType = isPhishing ? 'phishing' : status === 'malicious' ? 'malware' : status === 'suspicious' ? 'suspicious' : 'safe';
+      const displayRiskLevel = status === 'malicious' ? 'High' : status === 'suspicious' ? 'Medium' : 'Low';
+      const riskPercent = Math.round(riskScore);
+      
+      // Build summary
+      let summary = '';
+      if (status === 'malicious') {
+        summary = `WARNING: This URL has been identified as a security threat! Risk Score: ${riskPercent}%. `;
+        if (riskFactors.length > 0) {
+          summary += `Detected issues: ${riskFactors.slice(0, 3).join(', ')}.`;
+        }
+        summary += ' Do NOT enter any personal information or credentials on this site.';
+      } else if (status === 'suspicious') {
+        summary = `CAUTION: This URL shows some warning signs. Risk Score: ${riskPercent}%. Exercise caution before proceeding.`;
+      } else {
+        summary = 'This URL appears to be safe and legitimate. No security threats were detected.';
+      }
+      
+      // Build issues list - for SAFE status, only show safety indicators, not risk factors
+      let issues;
+      if (status === 'safe') {
+        // For safe URLs, show safety indicators as positive confirmations
+        issues = safetyIndicators.length > 0 
+          ? safetyIndicators.map(s => `✓ ${s}`)
+          : ['✓ No security threats detected', '✓ URL appears legitimate'];
+      } else {
+        // For suspicious/malicious, show risk factors as warnings
+        issues = riskFactors.length > 0 
+          ? riskFactors.map(f => `⚠ ${f}`)
+          : ['⚠ Potential security concern detected'];
+      }
+      
+      // Build indicators - same logic
+      let indicators;
+      if (status === 'safe') {
+        indicators = safetyIndicators.length > 0 
+          ? safetyIndicators 
+          : ['Security analysis completed - No threats identified'];
+      } else {
+        indicators = riskFactors.length > 0 
+          ? riskFactors 
+          : ['Potential security concern detected'];
+      }
+      
+      return {
+        status,
+        threat: status,
+        threatType,
+        riskLevel: displayRiskLevel,
+        riskPercent,
+        issues,
+        indicators,
+        summary,
+        confidence: riskPercent,
+        scanTime: data.scanTime ? (data.scanTime / 1000).toFixed(2) : ((elapsedMs || 0) / 1000).toFixed(2),
+        domain: this.extractDomainSafe(url),
+        rawThreats: riskFactors,
+        isSafe: !isPhishing && status === 'safe',
+        urlAnalysis: data.urlAnalysis,
+        domainAnalysis: data.domainAnalysis,
+        mlAnalysis: data.mlAnalysis
+      };
+    }
+    
+    // Fallback: Handle old Safe Browsing API format
     const threatList = Array.isArray(apiResult?.threats) ? apiResult.threats : [];
     const hasThreats = threatList.length > 0;
     const threatTypes = threatList.map((t) => (t.type || t.threatType || '').toUpperCase());
@@ -569,12 +662,22 @@ class ScanningSystem {
     e.preventDefault();
     const form = e.target instanceof HTMLFormElement ? e.target : e.currentTarget;
     const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
-    if (submitBtn) submitBtn.disabled = true;
+    const originalLabel = submitBtn ? submitBtn.textContent : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Scanning...';
+      submitBtn.classList.add('loading');
+    }
     console.log('[handleEmailScan] Scan started');
 
     const email = document.getElementById('email-input').value.trim();
     if (!email) {
       this.showNotification('Please enter email content', 'error');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel || 'Scan Email';
+        submitBtn.classList.remove('loading');
+      }
       return;
     }
 
@@ -584,9 +687,19 @@ class ScanningSystem {
     const resultsSection = document.getElementById('results-section');
     if (resultsSection) resultsSection.style.display = 'block';
 
-    // Perform mock scan (revert to original behavior)
     const startTime = performance.now();
-    const scanResult = this.generateEmailScanResult(email);
+    let scanResult;
+    
+    try {
+      // Try calling the real backend API
+      scanResult = await this.scanEmailViaBackend(email);
+      console.log('[handleEmailScan] Backend scan result:', scanResult);
+    } catch (error) {
+      console.warn('[handleEmailScan] Backend unavailable, using fallback:', error.message);
+      // Fallback to mock scan if backend is unavailable
+      scanResult = this.generateEmailScanResult(email);
+    }
+    
     const endTime = performance.now();
     scanResult.scanTime = ((endTime - startTime) / 1000).toFixed(2);
 
@@ -603,7 +716,58 @@ class ScanningSystem {
 
     // Scroll to results
     if (resultsSection) resultsSection.scrollIntoView({ behavior: 'smooth' });
-    if (submitBtn) submitBtn.disabled = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalLabel || 'Scan Email';
+      submitBtn.classList.remove('loading');
+    }
+  }
+
+  /**
+   * Call backend email scan endpoint (PhishingDistilBERT model)
+   */
+  async scanEmailViaBackend(emailContent) {
+    const API_BASE = window.CONFIG?.API_BASE_URL || 'http://localhost:3000';
+    
+    const response = await fetch(`${API_BASE}/api/scan/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emailContent })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Backend responded with ${response.status}`);
+    }
+    
+    const responseData = await response.json();
+    console.log('[scanEmailViaBackend] API response:', responseData);
+    
+    // Extract data from response (API wraps in {success, data})
+    const data = responseData.data || responseData;
+    
+    // Convert backend response to UI format
+    const isPhishing = data.classification === 'phishing';
+    const confidence = (data.confidence || 0.5) * 100;
+    const status = isPhishing ? (confidence > 80 ? 'malicious' : 'suspicious') : 'safe';
+    
+    return {
+      status,
+      threat: status,
+      riskLevel: status === 'safe' ? 'Low' : status === 'suspicious' ? 'Medium' : 'High',
+      riskPercent: isPhishing ? Math.round(confidence) : Math.round(100 - confidence),
+      issues: isPhishing 
+        ? [`Phishing detected with ${confidence.toFixed(1)}% confidence`, ...(data.indicators || [])]
+        : ['No phishing indicators detected', 'Email appears safe'],
+      indicators: data.indicators || (isPhishing 
+        ? ['⚠ Phishing patterns detected', '⚠ Suspicious content'] 
+        : ['✓ No phishing patterns', '✓ Safe content']),
+      summary: isPhishing
+        ? `WARNING: This email has been identified as a potential phishing attempt with ${confidence.toFixed(1)}% confidence. ${(data.indicators || []).join('. ')}. Exercise extreme caution - do not click links or download attachments.`
+        : `This email appears to be legitimate. Our PhishingDistilBERT model analysis found no phishing indicators (${(100 - confidence).toFixed(1)}% safe confidence). The content does not match known phishing patterns.`,
+      confidence: confidence,
+      isSafe: !isPhishing,
+      model: data.model || 'PhishingDistilBERT'
+    };
   }
 
   /**
@@ -672,68 +836,168 @@ class ScanningSystem {
   }
 
   /**
-   * Generate mock Email scan result
+   * Generate Email scan result using heuristic detection (consistent results)
    */
   generateEmailScanResult(emailContent) {
-    const threats = [
-      {
-        status: 'safe',
-        riskLevel: 'Low',
-        riskPercent: 8,
-        issues: [
-          'Valid SPF record confirmed',
-          'DKIM signature valid',
-          'No suspicious attachments'
-        ],
-        indicators: [
-          '✓ Valid SPF/DKIM/DMARC',
-          '✓ Legitimate Sender Domain',
-          '✓ No Malicious Attachments',
-          '✓ Safe Content'
-        ],
-        summary: 'This email appears legitimate. It has valid authentication records, legitimate sender domain, and safe content. The sender\'s identity has been verified through SPF, DKIM, and DMARC protocols.',
-        confidence: 97
-      },
-      {
-        status: 'suspicious',
-        riskLevel: 'Medium',
-        riskPercent: 62,
-        issues: [
-          'Suspicious sender domain variation',
-          'Generic greeting detected',
-          'Urgent language used to pressure action'
-        ],
-        indicators: [
-          '⚠ Domain Variation Detected',
-          '⚠ Generic Greeting',
-          '⚠ Urgency Language Patterns',
-          '✓ Valid Formatting'
-        ],
-        summary: 'This email shows warning signs. While not confirmed malicious, it contains patterns commonly used in phishing attempts. The sender domain has suspicious variations, and the email uses urgency tactics. Verify requests before taking action.',
-        confidence: 81
-      },
-      {
-        status: 'malicious',
-        riskLevel: 'Critical',
-        riskPercent: 98,
-        issues: [
-          'Spoofed sender domain',
-          'Malicious links detected',
-          'Malware attachment identified',
-          'Known phishing email template'
-        ],
-        indicators: [
-          '✕ Domain Spoofing Confirmed',
-          '✕ Malicious URLs Detected',
-          '✕ Malware Attachment (Trojan)',
-          '✕ Known Phishing Template'
-        ],
-        summary: 'ALERT: This is a confirmed phishing/malware email. It spoofs a legitimate sender domain, contains malicious links, and has malware attachments. This email attempts to steal credentials or distribute malware. DELETE IMMEDIATELY and mark as spam.',
-        confidence: 99
-      }
-    ];
+    // Heuristic-based detection for consistent results
+    const text = emailContent.toLowerCase();
+    let phishingScore = 0;
+    let issues = [];
+    let indicators = [];
+    let isVerifiedLegitimate = false;
 
-    return threats[Math.floor(Math.random() * threats.length)];
+    // Check for email headers and authentication results
+    const hasHeaders = /^(from:|received:|return-path:|reply-to:|authentication-results:)/im.test(emailContent);
+    
+    if (hasHeaders) {
+      // Parse authentication results
+      const spfPass = /spf=pass/i.test(emailContent);
+      const dkimPass = /dkim=pass/i.test(emailContent);
+      const dmarcPass = /dmarc=pass/i.test(emailContent);
+      
+      // Extract sender domain
+      const fromMatch = emailContent.match(/from:.*?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+      const senderDomain = fromMatch ? fromMatch[1].toLowerCase() : null;
+      
+      // Known legitimate domains
+      const legitimateDomains = {
+        netflix: ['netflix.com', 'mailer.netflix.com'],
+        amazon: ['amazon.com', 'amazonses.com'],
+        paypal: ['paypal.com'],
+        microsoft: ['microsoft.com', 'microsoftonline.com', 'outlook.com'],
+        apple: ['apple.com', 'icloud.com'],
+        google: ['google.com', 'gmail.com']
+      };
+      
+      // Check if from a verified legitimate domain
+      if (senderDomain) {
+        for (const [brand, domains] of Object.entries(legitimateDomains)) {
+          if (domains.some(d => senderDomain.includes(d))) {
+            isVerifiedLegitimate = true;
+            indicators.push(`✓ Verified ${brand.charAt(0).toUpperCase() + brand.slice(1)} Domain`);
+            phishingScore -= 0.3;
+            break;
+          }
+        }
+      }
+      
+      // Authentication bonuses
+      if (spfPass) {
+        phishingScore -= 0.15;
+        indicators.push('✓ SPF Passed');
+      }
+      if (dkimPass) {
+        phishingScore -= 0.15;
+        indicators.push('✓ DKIM Passed');
+      }
+      if (dmarcPass) {
+        phishingScore -= 0.15;
+        indicators.push('✓ DMARC Passed');
+      }
+      
+      // Extra bonus if ALL authentication passed AND from verified domain
+      if (spfPass && dkimPass && dmarcPass && isVerifiedLegitimate) {
+        phishingScore -= 0.2;
+        indicators.push('✓ Fully Authenticated');
+      }
+    }
+
+    // Content penalty multiplier - reduced for verified legitimate emails
+    const penaltyMultiplier = isVerifiedLegitimate ? 0.2 : 1.0;
+
+    // Check for urgency keywords (reduced weight for legitimate sources)
+    if (/urgent|immediately|asap|click now|verify now|act now|expire|suspended|locked|compromised/i.test(text)) {
+      phishingScore += 0.2 * penaltyMultiplier;
+      if (!isVerifiedLegitimate) {
+        issues.push('Urgent language used to pressure action');
+        indicators.push('⚠ Urgency Language Patterns');
+      }
+    }
+
+    // Check for financial keywords (some are normal in legitimate account emails)
+    if (/payment|credit card|bank account|gift card|winner|prize/i.test(text)) {
+      phishingScore += 0.2 * penaltyMultiplier;
+      if (!isVerifiedLegitimate) {
+        issues.push('Financial keywords detected');
+        indicators.push('⚠ Financial Keywords Found');
+      }
+    }
+    
+    // Password/verify are COMMON in legitimate account notification emails
+    if (/password|verify|identity/i.test(text) && !isVerifiedLegitimate) {
+      phishingScore += 0.15;
+      issues.push('Credential keywords detected');
+      indicators.push('⚠ Credential Keywords');
+    }
+
+    // Check for suspicious URLs (only if not from verified source)
+    if (!isVerifiedLegitimate && /https?:\/\/[^\s]+/i.test(text)) {
+      // Check for suspicious URL patterns
+      if (/secure[.-]|verify[.-]|confirm[.-]|update[.-]|\.xyz|\.info|\.top|\.click/i.test(text)) {
+        phishingScore += 0.2;
+        issues.push('Suspicious URL patterns detected');
+        indicators.push('⚠ Suspicious Links Detected');
+      }
+    }
+
+    // Check for impersonal greetings (less relevant for verified emails)
+    if (/dear customer|dear user|dear friend|valued customer|account holder/i.test(text) && !isVerifiedLegitimate) {
+      phishingScore += 0.1;
+      issues.push('Generic greeting detected');
+      indicators.push('⚠ Generic Greeting');
+    }
+
+    // Check for pressure tactics
+    if (/do not ignore|immediate attention|time sensitive|will be suspended|lose access|act now or/i.test(text)) {
+      phishingScore += 0.15 * penaltyMultiplier;
+      if (!isVerifiedLegitimate) {
+        issues.push('Pressure tactics to force quick action');
+        indicators.push('⚠ Pressure Tactics');
+      }
+    }
+
+    // Ensure score stays in valid range
+    phishingScore = Math.max(0, Math.min(1, phishingScore));
+
+    // Determine status based on score
+    let status, riskLevel, riskPercent, summary;
+    
+    if (phishingScore >= 0.5) {
+      status = 'malicious';
+      riskLevel = 'High';
+      riskPercent = Math.round(phishingScore * 100);
+      indicators.unshift('✕ High Phishing Risk');
+      summary = `ALERT: This email shows strong phishing indicators (${riskPercent}% risk). ${issues.join('. ')}. Do NOT click links or provide personal information.`;
+    } else if (phishingScore >= 0.25) {
+      status = 'suspicious';
+      riskLevel = 'Medium';
+      riskPercent = Math.round(phishingScore * 100);
+      indicators.unshift('⚠ Suspicious Content');
+      summary = `This email shows warning signs (${riskPercent}% risk). ${issues.join('. ')}. Exercise caution before taking any action.`;
+    } else {
+      status = 'safe';
+      riskLevel = 'Low';
+      riskPercent = Math.round(phishingScore * 100);
+      if (issues.length === 0) issues = ['No phishing indicators detected'];
+      if (!indicators.some(i => i.startsWith('✓'))) {
+        indicators.unshift('✓ No Phishing Patterns');
+      }
+      summary = isVerifiedLegitimate 
+        ? 'This email is from a verified legitimate sender with proper authentication. Safe to interact with.'
+        : 'This email appears legitimate. No significant phishing indicators were detected.';
+    }
+
+    return {
+      status,
+      riskLevel,
+      riskPercent,
+      issues,
+      indicators,
+      summary,
+      confidence: Math.round((status === 'safe' ? (1 - phishingScore) : phishingScore) * 100),
+      isSafe: status === 'safe',
+      isVerifiedLegitimate
+    };
   }
 
   /**

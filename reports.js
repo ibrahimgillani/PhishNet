@@ -5,13 +5,22 @@ class ReportsManager {
     this.scanHistory = [];
     this.filteredReports = [];
     this.currentFilter = null;
+    console.log('[ReportsManager] Constructor called');
     this.init();
   }
 
   init() {
+    console.log('[ReportsManager] init() called, waiting for DOMContentLoaded');
     document.addEventListener('DOMContentLoaded', async () => {
+      console.log('[ReportsManager] DOMContentLoaded fired, starting load...');
+      
+      // Check if config.js is loaded
+      console.log('[ReportsManager] API_CONFIG available:', typeof window.API_CONFIG !== 'undefined');
+      console.log('[ReportsManager] getApiUrlWithParams available:', typeof window.getApiUrlWithParams === 'function');
+      
       // Ensure history is loaded before rendering to avoid empty/partial UI
       await this.loadScanHistory();
+      console.log('[ReportsManager] loadScanHistory complete, scanHistory.length =', this.scanHistory.length);
 
       // If a specific scan was selected from another page, prefer it (it may contain richer details)
       try {
@@ -196,6 +205,89 @@ class ReportsManager {
     return 'safe'; // default
   }
 
+  /**
+   * Transform history data from API format to frontend format
+   */
+  transformHistoryData(historyItems) {
+    return historyItems.map(item => {
+      const analysis = item.analysis || {};
+      let indicators = item.indicators || analysis.indicators || item.meta?.indicators || [];
+      if (!Array.isArray(indicators)) indicators = [];
+      indicators = indicators
+        .map(i => this.sanitizeValue(i))
+        .filter(i => i !== null)
+        .map(i => String(i).replace(/^[^a-zA-Z0-9]+/g, '').trim());
+
+      let issues = item.issues || analysis.issues || item.meta?.issues || [];
+      if (!Array.isArray(issues)) issues = [];
+      issues = issues
+        .map(i => this.sanitizeValue(i))
+        .filter(i => i !== null)
+        .map(i => String(i).replace(/^[^a-zA-Z0-9]+/g, '').trim());
+
+      const summary = this.sanitizeValue(item.summary) || this.sanitizeValue(analysis.summary) || '';
+      const confidence = (typeof item.confidence !== 'undefined') ? item.confidence : (analysis.confidence || 95);
+
+      const reportData = {
+        id: item._id,
+        type: item.scanType === 'email' || (item.senderEmail || '').includes('@') ? 'email' : 'url',
+        value: item.url || item.value || '',
+        senderEmail: item.senderEmail || null,
+        threat: (() => {
+          // Priority: explicit threatLevel/threat field > isSafe flag
+          const rawThreat = item.threatLevel || item.threat;
+          
+          // If we have an explicit threat level, use it
+          if (rawThreat) {
+            const normalized = String(rawThreat).toLowerCase();
+            if (['safe', 'low'].includes(normalized)) return 'safe';
+            if (['suspicious', 'medium'].includes(normalized)) return 'suspicious';
+            if (['malicious', 'high', 'critical', 'phishing', 'danger'].includes(normalized)) return 'malicious';
+          }
+          
+          // Check isSafe flag - if explicitly false, it's malicious
+          if (item.isSafe === false) return 'malicious';
+          if (item.isSafe === true) return 'safe';
+          
+          // Check threatType for additional context
+          if (item.threatType) {
+            const threatType = String(item.threatType).toLowerCase();
+            if (threatType.includes('phishing') || threatType.includes('malware') || threatType.includes('malicious')) {
+              return 'malicious';
+            }
+          }
+          
+          // Default to safe only if no threat indicators
+          return 'safe';
+        })(),
+        threatType: item.threatType || null,
+        confidence: confidence,
+        riskLevel: (() => {
+          // Derive risk level from threat indicators
+          const rawThreat = item.threatLevel || item.threat;
+          if (rawThreat) {
+            const normalized = String(rawThreat).toLowerCase();
+            if (['high', 'critical', 'malicious', 'phishing'].includes(normalized)) return 'High';
+            if (['medium', 'suspicious'].includes(normalized)) return 'Medium';
+          }
+          if (item.isSafe === false) return 'High';
+          return item.riskLevel || 'Low';
+        })(),
+        timestamp: item.checkedAt ? new Date(item.checkedAt).getTime() : Date.now(),
+        date: item.checkedAt ? new Date(item.checkedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '',
+        time: item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '',
+        indicators: indicators,
+        issues: issues,
+        rawThreats: item.threatCategories || [],
+        domain: item.domain || null,
+        isSafe: item.isSafe || false
+      };
+
+      reportData.summary = summary || this.generateProfessionalSummary(reportData);
+      return reportData;
+    });
+  }
+
   async loadScanHistory() {
     try {
       const token = localStorage.getItem('token');
@@ -206,7 +298,39 @@ class ReportsManager {
         return;
       }
 
-      const response = await fetch(getApiUrlWithParams(window.API_CONFIG.api.endpoints.users.history, { limit: 100 }), {
+      // Wait for config to be available
+      if (typeof window.API_CONFIG === 'undefined' || typeof window.getApiUrlWithParams === 'undefined') {
+        console.warn('[ReportsManager] API_CONFIG not loaded yet, waiting...');
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // Check again and fallback if still not available
+      if (typeof window.API_CONFIG === 'undefined' || typeof window.getApiUrlWithParams === 'undefined') {
+        console.error('[ReportsManager] API_CONFIG still not available, using fallback URL');
+        // Fallback to direct URL
+        const fallbackUrl = 'http://localhost:5000/api/users/history?limit=100';
+        const response = await fetch(fallbackUrl, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            this.scanHistory = this.transformHistoryData(data.data.history);
+            console.log('[ReportsManager] Loaded history via fallback:', this.scanHistory.length, 'records');
+          }
+        }
+        return;
+      }
+
+      const apiUrl = window.getApiUrlWithParams(window.API_CONFIG.api.endpoints.users.history, { limit: 100 });
+      console.log('[ReportsManager] Fetching history from:', apiUrl);
+
+      const response = await fetch(apiUrl, {
         method: 'GET',
         credentials: 'include',
         headers: {
@@ -217,103 +341,10 @@ class ReportsManager {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.success) {
-          // Transform API data to match frontend format and include detailed fields
-          this.scanHistory = data.data.history.map(item => {
-            const analysis = item.analysis || {};
-            let indicators = item.indicators || analysis.indicators || item.meta?.indicators || [];
-            if (!Array.isArray(indicators)) indicators = [];
-            indicators = indicators
-              .map(i => this.sanitizeValue(i))
-              .filter(i => i !== null)
-              .map(i => String(i).replace(/^[^a-zA-Z0-9]+/g, '').trim()); // Remove leading special chars
-
-            let issues = item.issues || analysis.issues || item.meta?.issues || [];
-            if (!Array.isArray(issues)) issues = [];
-            issues = issues
-              .map(i => this.sanitizeValue(i))
-              .filter(i => i !== null)
-              .map(i => String(i).replace(/^[^a-zA-Z0-9]+/g, '').trim()); // Remove leading special chars
-
-            const summary = this.sanitizeValue(item.summary) || this.sanitizeValue(analysis.summary) || this.sanitizeValue(item.details) || this.sanitizeValue(item.meta?.summary) || '';
-            const rawRisk = this.sanitizeValue(item.riskLevel) || this.sanitizeValue(analysis.riskLevel) || this.sanitizeValue(item.risk) || this.sanitizeValue(item.meta?.riskLevel) || null;
-            const riskPercent = this.sanitizeValue(item.riskPercent) || this.sanitizeValue(analysis.riskPercent) || this.sanitizeValue(item.meta?.riskPercent) || null;
-            const confidence = (typeof item.confidence !== 'undefined') ? item.confidence : (analysis.confidence || null);
-
-            const deriveRisk = (rl, thr, rawThreatLevel) => {
-              if (rl) return rl;
-              const t = (thr || '').toString().toLowerCase();
-              if (t === 'safe') return 'Low';
-              if (t === 'suspicious') return 'Medium';
-              if (t === 'malicious') return 'High';
-              const r = (rawThreatLevel || '').toString().toLowerCase();
-              if (r === 'low') return 'Low';
-              if (r === 'medium') return 'Medium';
-              if (r === 'high' || r === 'critical') return 'High';
-              return null;
-            };
-
-            const computedRisk = deriveRisk(rawRisk, (item.threatLevel || item.threat || null) && (['safe','suspicious','malicious'].includes(String(item.threatLevel || item.threat).toLowerCase()) ? item.threatLevel || item.threat : null), item.threatLevel || null);
-
-            const reportData = {
-              id: item._id,
-                // Detect email scans robustly: prefer explicit scanType, else check sender/email/value/url for an email address
-                type: (function() {
-                  const explicit = String(item.scanType || '').toLowerCase();
-                  if (explicit && explicit.indexOf('email') !== -1) return 'email';
-                  const probe = String(item.senderEmail || item.email || item.value || item.url || '');
-                  return probe.indexOf('@') !== -1 ? 'email' : 'url';
-                })(),
-                value: (function() {
-                  const t = String(item.scanType || '').toLowerCase();
-                  const isEmail = t.indexOf('email') !== -1 || String(item.senderEmail || item.email || '').indexOf('@') !== -1;
-                  
-                  // For email scans, extract only the email address, not the full body
-                  if (isEmail) {
-                    // First try senderEmail field
-                    if (item.senderEmail) return item.senderEmail;
-                    if (item.email) return item.email;
-                    // If not found, try to extract from value
-                    if (item.value) {
-                      const emailMatch = String(item.value).match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-                      if (emailMatch) return emailMatch[0];
-                    }
-                    return item.value || item.url || '';
-                  }
-                  // For URL scans
-                  return (item.url || item.value || '');
-                })(),
-                senderEmail: item.senderEmail || item.email || null,
-              // Normalize threat - accept threatLevel, threat, status or isSafe flag
-              threat: (() => {
-                const raw = item.threatLevel || item.threat || item.status || (item.isSafe === true ? 'safe' : (item.isSafe === false ? 'malicious' : null));
-                if (raw && ['safe','suspicious','malicious'].includes(String(raw).toLowerCase())) return String(raw).toLowerCase();
-                return this.mapThreatLevel(raw);
-              })(),
-              threatType: item.threatType || analysis.threatType || null,
-              confidence: confidence,
-              riskLevel: computedRisk || rawRisk || null,
-              riskPercent: riskPercent,
-              timestamp: item.checkedAt ? new Date(item.checkedAt).getTime() : Date.now(),
-              date: item.checkedAt ? new Date(item.checkedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '',
-              time: item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '',
-              indicators: indicators || [],
-              issues: issues || [],
-              rawThreats: item.rawThreats || item.threatCategories || [],
-              details: item.details || analysis.details || null,
-              domain: item.domain || null,
-              isSafe: item.isSafe || false
-            };
-
-            // Regenerate professional summary if old summary contains "Google Safe Browsing"
-            if (!summary || summary.includes('Google Safe Browsing') || summary.includes('Safe Browsing')) {
-              reportData.summary = this.generateProfessionalSummary(reportData);
-            } else {
-              reportData.summary = summary || '';
-            }
-
-            return reportData;
-          });
+        console.log('[ReportsManager] API response:', data.success, 'history count:', data.data?.history?.length || 0);
+        if (data.success && data.data && data.data.history) {
+          // Transform API data to match frontend format
+          this.scanHistory = this.transformHistoryData(data.data.history);
           console.log(`[ReportsManager] Loaded ${this.scanHistory.length} scans from server`);
         } else {
           console.error('[ReportsManager] Failed to load scan history:', data.message);
@@ -2130,51 +2161,264 @@ async function downloadReportAsPDF(elementId, fileName = "report.pdf") {
 
     const { jsPDF } = window.jspdf;
 
-    // If exporting the single main report and we have a currentReport, prefer generating
-    // a styled HTML document and let jsPDF.html render it. This produces a crisp, professional PDF.
+    // If exporting the single main report and we have a currentReport, create a professional text-based PDF
     if (window.reportsManager && window.reportsManager.currentReport && elementId === 'main-report') {
       const report = window.reportsManager.currentReport;
-      const html = window.reportsManager.generateHtmlReport(report);
-
-      // Create offscreen container
-      const container = document.createElement('div');
-      container.style.position = 'absolute';
-      container.style.left = '-9999px';
-      container.style.top = '0';
-      container.style.width = '900px';
-      container.style.visibility = 'visible';
-      container.innerHTML = html;
-      document.body.appendChild(container);
-
-      try {
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const margin = 12;
-        const usableWidth = pdf.internal.pageSize.getWidth() - margin * 2;
-
-        // Use jsPDF.html which uses html2canvas internally for high-fidelity rendering.
-        await new Promise((resolve, reject) => {
-          try {
-            pdf.html(container, {
-              x: margin,
-              y: margin,
-              html2canvas: { scale: Math.min(2, (window.devicePixelRatio || 1.5)), useCORS: true, logging: false },
-              windowWidth: 900,
-              callback: function () {
-                try {
-                  pdf.save(fileName);
-                  if (window.reportsManager) window.reportsManager.showNotification('PDF downloaded successfully!', 'success');
-                  resolve(true);
-                } catch (e) {
-                  reject(e);
-                }
-              }
-            });
-          } catch (e) { reject(e); }
+      
+      if (window.reportsManager) window.reportsManager.showNotification('Generating PDF...', 'info');
+      
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      const contentWidth = pageWidth - margin * 2;
+      let y = margin;
+      
+      // Helper function to add new page if needed
+      const checkNewPage = (requiredHeight = 20) => {
+        if (y + requiredHeight > pageHeight - margin) {
+          pdf.addPage();
+          y = margin;
+          return true;
+        }
+        return false;
+      };
+      
+      // Helper function to add wrapped text
+      const addWrappedText = (text, x, startY, maxWidth, lineHeight = 5) => {
+        const lines = pdf.splitTextToSize(text, maxWidth);
+        lines.forEach((line, i) => {
+          checkNewPage(lineHeight);
+          pdf.text(line, x, y);
+          y += lineHeight;
         });
-      } finally {
-        try { document.body.removeChild(container); } catch (e) {}
+        return y;
+      };
+      
+      // Colors
+      const primaryColor = [11, 99, 217]; // #0B63D9
+      const safeColor = [0, 255, 136]; // #00FF88
+      const warningColor = [255, 193, 7]; // #FFC107
+      const dangerColor = [255, 77, 77]; // #FF4D4D
+      const textDark = [51, 51, 51];
+      const textMuted = [102, 102, 102];
+      
+      const threatColor = report.threat === 'safe' ? safeColor : report.threat === 'suspicious' ? warningColor : dangerColor;
+      
+      // ===== HEADER =====
+      // Logo/Brand
+      pdf.setFillColor(...primaryColor);
+      pdf.rect(0, 0, pageWidth, 40, 'F');
+      
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(24);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('PhishNet', margin, 18);
+      
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Security Scan Report', margin, 28);
+      
+      pdf.setFontSize(9);
+      pdf.text(`Generated: ${report.date} at ${report.time}`, margin, 35);
+      
+      y = 50;
+      
+      // ===== THREAT STATUS BOX =====
+      const statusBoxHeight = 35;
+      pdf.setFillColor(245, 245, 245);
+      pdf.roundedRect(margin, y, contentWidth, statusBoxHeight, 3, 3, 'F');
+      
+      // Status indicator circle
+      pdf.setFillColor(...threatColor);
+      pdf.circle(margin + 15, y + statusBoxHeight/2, 8, 'F');
+      
+      // Status symbol
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      const statusSymbol = report.threat === 'safe' ? '✓' : report.threat === 'suspicious' ? '!' : 'X';
+      pdf.text(statusSymbol, margin + 12, y + statusBoxHeight/2 + 4);
+      
+      // Status text
+      pdf.setTextColor(...textDark);
+      pdf.setFontSize(16);
+      pdf.text(`Status: ${(report.threat || 'UNKNOWN').toUpperCase()}`, margin + 30, y + 14);
+      
+      pdf.setTextColor(...textMuted);
+      pdf.setFontSize(10);
+      pdf.text(`Confidence Score: ${report.confidence || 0}%  |  Risk Level: ${report.riskLevel || 'Unknown'}`, margin + 30, y + 26);
+      
+      y += statusBoxHeight + 15;
+      
+      // ===== SCAN INFORMATION =====
+      pdf.setTextColor(...primaryColor);
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Scan Information', margin, y);
+      y += 3;
+      
+      // Underline
+      pdf.setDrawColor(...primaryColor);
+      pdf.setLineWidth(0.5);
+      pdf.line(margin, y, margin + 50, y);
+      y += 10;
+      
+      // Info grid
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      
+      const infoItems = [
+        { label: 'Scan Type:', value: report.type === 'url' ? 'URL Scan' : 'Email Scan' },
+        { label: 'Target:', value: report.value || 'N/A' },
+        { label: 'Domain:', value: report.domain || 'N/A' },
+        { label: 'Scan Date:', value: `${report.date} at ${report.time}` }
+      ];
+      
+      infoItems.forEach(item => {
+        checkNewPage(12);
+        pdf.setTextColor(...textMuted);
+        pdf.text(item.label, margin, y);
+        pdf.setTextColor(...textDark);
+        const valueLines = pdf.splitTextToSize(item.value, contentWidth - 35);
+        valueLines.forEach((line, i) => {
+          pdf.text(line, margin + 35, y);
+          if (i < valueLines.length - 1) y += 5;
+        });
+        y += 8;
+      });
+      
+      y += 5;
+      
+      // ===== THREAT INDICATORS =====
+      checkNewPage(30);
+      pdf.setTextColor(...primaryColor);
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Threat Indicators', margin, y);
+      y += 3;
+      pdf.line(margin, y, margin + 50, y);
+      y += 10;
+      
+      const indicators = report.indicators || [];
+      if (indicators.length === 0) {
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(10);
+        pdf.setTextColor(...textMuted);
+        pdf.text('No threat indicators detected', margin, y);
+        y += 8;
+      } else {
+        indicators.forEach((indicator, index) => {
+          checkNewPage(15);
+          
+          // Indicator box
+          const indicatorHeight = 12;
+          const isWarning = indicator.toLowerCase().includes('suspicious') || indicator.toLowerCase().includes('http') || indicator.toLowerCase().includes('risk');
+          const indicatorColor = isWarning ? warningColor : (report.threat === 'safe' ? safeColor : dangerColor);
+          
+          pdf.setFillColor(indicatorColor[0], indicatorColor[1], indicatorColor[2], 0.1);
+          pdf.setDrawColor(...indicatorColor);
+          pdf.setLineWidth(0.3);
+          pdf.roundedRect(margin, y - 3, contentWidth, indicatorHeight, 2, 2, 'FD');
+          
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(9);
+          pdf.setTextColor(...textDark);
+          const indicatorText = pdf.splitTextToSize(`• ${indicator}`, contentWidth - 10);
+          pdf.text(indicatorText[0], margin + 5, y + 4);
+          
+          y += indicatorHeight + 3;
+        });
       }
-
+      
+      y += 5;
+      
+      // ===== DETECTED ISSUES =====
+      checkNewPage(30);
+      pdf.setTextColor(...primaryColor);
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Detected Issues', margin, y);
+      y += 3;
+      pdf.line(margin, y, margin + 50, y);
+      y += 10;
+      
+      const issues = report.issues || [];
+      if (issues.length === 0) {
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(10);
+        pdf.setTextColor(...textMuted);
+        pdf.text('No issues detected', margin, y);
+        y += 8;
+      } else {
+        issues.forEach((issue, index) => {
+          checkNewPage(10);
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(10);
+          pdf.setTextColor(...textDark);
+          pdf.text(`${index + 1}. ${issue}`, margin + 5, y);
+          y += 7;
+        });
+      }
+      
+      y += 10;
+      
+      // ===== SECURITY SUMMARY =====
+      checkNewPage(50);
+      pdf.setTextColor(...primaryColor);
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Security Assessment Summary', margin, y);
+      y += 3;
+      pdf.line(margin, y, margin + 70, y);
+      y += 10;
+      
+      // Summary box
+      const summaryText = report.summary || 'No summary available';
+      const summaryLines = pdf.splitTextToSize(summaryText, contentWidth - 20);
+      const summaryBoxHeight = Math.max(30, summaryLines.length * 5 + 15);
+      
+      checkNewPage(summaryBoxHeight + 10);
+      
+      pdf.setFillColor(240, 247, 255);
+      pdf.setDrawColor(...primaryColor);
+      pdf.setLineWidth(0.8);
+      pdf.roundedRect(margin, y, contentWidth, summaryBoxHeight, 3, 3, 'FD');
+      
+      // Left border accent
+      pdf.setFillColor(...primaryColor);
+      pdf.rect(margin, y, 3, summaryBoxHeight, 'F');
+      
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.setTextColor(...textDark);
+      
+      let summaryY = y + 10;
+      summaryLines.forEach(line => {
+        pdf.text(line, margin + 10, summaryY);
+        summaryY += 5;
+      });
+      
+      y += summaryBoxHeight + 15;
+      
+      // ===== FOOTER =====
+      // Add footer on last page
+      const footerY = pageHeight - 15;
+      pdf.setDrawColor(200, 200, 200);
+      pdf.setLineWidth(0.3);
+      pdf.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
+      
+      pdf.setTextColor(...textMuted);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('PhishNet Security Report', margin, footerY);
+      pdf.text(`Report ID: ${report.id || 'N/A'}`, pageWidth / 2 - 15, footerY);
+      pdf.text('© 2026 PhishNet Security', pageWidth - margin - 35, footerY);
+      
+      // Save PDF
+      pdf.save(fileName);
+      if (window.reportsManager) window.reportsManager.showNotification('PDF downloaded successfully!', 'success');
+      
       return;
     }
 

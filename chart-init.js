@@ -16,10 +16,10 @@ function initThreatChart() {
     threatChartInstance = new Chart(ctx, {
       type: 'line',
       data: {
-        labels: ['Jan 4', 'Jan 5', 'Jan 6', 'Jan 7', 'Jan 8', 'Jan 9', 'Jan 10'],
+        labels: ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7'],
         datasets: [{
-          label: 'Malicious Links Clicked',
-          data: [5, 8, 6, 10, 7, 9, 12],
+          label: 'Malicious Links',
+          data: [0, 0, 0, 0, 0, 0, 0],
           borderColor: '#FF4D4D',
           backgroundColor: 'rgba(255, 77, 77, 0.1)',
           borderWidth: 3,
@@ -31,8 +31,8 @@ function initThreatChart() {
           tension: 0.4,
           fill: true
         }, {
-          label: 'Suspicious Links Clicked',
-          data: [3, 5, 7, 4, 6, 5, 8],
+          label: 'Suspicious Links',
+          data: [0, 0, 0, 0, 0, 0, 0],
           borderColor: '#FFC107',
           backgroundColor: 'rgba(255, 193, 7, 0.1)',
           borderWidth: 3,
@@ -44,8 +44,8 @@ function initThreatChart() {
           tension: 0.4,
           fill: true
         }, {
-          label: 'Safe Links Clicked',
-          data: [85, 92, 88, 105, 98, 110, 125],
+          label: 'Safe Links',
+          data: [0, 0, 0, 0, 0, 0, 0],
           borderColor: '#00FF88',
           backgroundColor: 'rgba(0, 255, 136, 0.1)',
           borderWidth: 3,
@@ -92,10 +92,10 @@ function initThreatChart() {
           y: {
             beginAtZero: true,
             min: 0,
-            max: 140,
+            suggestedMax: 10,
             ticks: {
               color: '#999999',
-              stepSize: 20,
+              stepSize: 1,
               font: { size: 10 }
             },
             grid: {
@@ -118,6 +118,9 @@ function initThreatChart() {
         }
       }
     });
+    
+    // Expose chart instance globally for dashboard-data.js to update
+    window.threatChartInstance = threatChartInstance;
     console.log('Chart initialized successfully');
   } catch(e) {
     console.error('Chart initialization error:', e);
