@@ -16,4 +16,8 @@ yarn-error.log*
 *.swo
 *~
 .cache/
-models/downloaded/
+models/downloaded/PhishingDistilBERT/
+*.safetensors
+*.onnx
+*.bin
+*.pb
