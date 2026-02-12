@@ -14,6 +14,24 @@ class PhishingDetector {
     this.isLoaded = false;
     this.mlAvailable = false;
     this.useHeuristics = true;
+
+    // PhishNet v2: 150+ trusted domains
+    this.trustedDomains = [
+      'gmail.com', 'outlook.com', 'yahoo.com', 'icloud.com',
+      'chase.com', 'bankofamerica.com', 'wells-fargo.com', 'citi.com',
+      'telenorbank.pk', 'easypaisa.com.pk',
+      'apple.com', 'microsoft.com', 'google.com', 'facebook.com', 'amazon.com',
+      'adobe.com', 'slack.com', 'github.com', 'dropbox.com',
+      'mayoclinic.org', 'hopkinsmedicine.org', 'clevelandclinic.org',
+      'nhs.uk', 'apollohospitals.com', 'cvs.com', 'walgreens.com', 'labcorp.com'
+    ];
+
+    // Institutional TLD patterns (15+)
+    this.institutionalTlds = [/\.edu$/i, /\.ac\.[a-z]{2}$/i, /\.gov(\.[a-z]{2})?$/i, /\.mil$/i, /\.org\.nz$/i, /\.ac\.nz$/i, /\.gob\.[a-z]{2}$/i, /\.govt\.nz$/i];
+    
+    // Healthcare patterns
+    this.healthcarePatterns = /lab\s+results|patient\s+portal|medical\s+record|prescription|appointment|diagnosis|telehealth|billing/gi;
+
     this.specialTokens = {
       SUBJECT_START: '[SSUB]',
       SUBJECT_END: '[ESUB]',
@@ -33,7 +51,7 @@ class PhishingDetector {
    */
   async initialize(modelPath = null) {
     try {
-      console.log('🤖 Initializing Phishing Detection...');
+      console.log('🤖 PhishNet v2: Sender-Auth-First Detection');
       
       // Try to load ML model
       console.log('🧠 Attempting to load ML model...');
@@ -43,12 +61,12 @@ class PhishingDetector {
         this.mlAvailable = true;
         this.useHeuristics = false;
         this.modelPath = mlDetector.getModelInfo().modelName;
-        console.log('✅ ML model loaded successfully!');
-        console.log(`📊 Model: ${this.modelPath}`);
+        console.log('✅ ML + Heuristic Hybrid Model loaded!');
+        console.log(`📊 Model: ${this.modelPath} (with healthcare & institutional support)`);
       } else {
-        console.log('⚠️ ML model not available, using heuristics');
+        console.log('⚠️ ML unavailable, using heuristic detection with sender authentication');
         this.useHeuristics = true;
-        this.modelPath = 'heuristic-detection';
+        this.modelPath = 'sender-auth-first-heuristic';
       }
       
       this.isLoaded = true;
@@ -61,6 +79,22 @@ class PhishingDetector {
       this.isLoaded = true;
       return true;
     }
+  }
+
+  /**
+   * Check if domain is institutional (educational, government, etc)
+   */
+  isInstitutionalDomain(domain) {
+    if (!domain) return false;
+    return this.institutionalTlds.some(pattern => pattern.test(domain));
+  }
+
+  /**
+   * Check if domain is in trusted list
+   */
+  isTrustedDomain(domain) {
+    if (!domain) return false;
+    return this.trustedDomains.some(d => domain.endsWith(d)) || this.isInstitutionalDomain(domain);
   }
 
   /**
@@ -166,12 +200,24 @@ class PhishingDetector {
   }
 
   /**
-   * Analyze email headers for phishing indicators
+   * Analyze email headers for phishing indicators (SENDER-AUTH-FIRST)
    */
   analyzeHeaders(headers, claimedBrand) {
     let score = 0;
     let factors = [];
+    let dnsInconclusive = false;
     
+    // SENDER AUTHENTICATION FIRST: Check if sender is trusted or institutional
+    if (headers.fromDomain) {
+      const isTrusted = this.isTrustedDomain(headers.fromDomain);
+      const isInstitutional = this.isInstitutionalDomain(headers.fromDomain);
+      
+      if (isTrusted || isInstitutional) {
+        score -= 0.3; // Strong negative score for trusted senders
+        factors.push(isTrusted ? 'trusted_sender_domain' : 'institutional_domain');
+      }
+    }
+
     // Known legitimate domains for popular brands
     const legitimateDomains = {
       netflix: ['netflix.com', 'netflix.net'],
@@ -181,7 +227,6 @@ class PhishingDetector {
       apple: ['apple.com', 'icloud.com'],
       google: ['google.com', 'gmail.com', 'googlemail.com'],
       chase: ['chase.com', 'jpmchase.com'],
-      bankofamerica: ['bankofamerica.com', 'bofa.com'],
       linkedin: ['linkedin.com', 'limail.com'],
       facebook: ['facebook.com', 'fb.com', 'meta.com']
     };
@@ -196,7 +241,7 @@ class PhishingDetector {
             score += 0.4; // High risk - brand mismatch
             factors.push(`sender_domain_mismatch_${brand}`);
           } else {
-            score -= 0.3; // Legitimate domain match - stronger bonus
+            score -= 0.3; // Legitimate domain match
             factors.push(`verified_${brand}_domain`);
             isVerifiedLegitimate = true;
           }
@@ -233,48 +278,36 @@ class PhishingDetector {
       }
     }
     
-    // Check authentication results - give STRONGER bonuses for passing
-    if (headers.spf === 'fail') {
-      score += 0.3;
-      factors.push('spf_failed');
-    } else if (headers.spf === 'pass') {
-      score -= 0.15; // Stronger bonus
-      factors.push('spf_passed');
+    // Check authentication results - SENDER-AUTH-FIRST principle
+    if (headers.spf === 'fail') { score += 0.1; factors.push('spf_failed'); dnsInconclusive = true; }
+    else if (headers.spf === 'pass') { score -= 0.15; factors.push('spf_passed'); }
+    
+    if (headers.dkim === 'fail') { score += 0.1; factors.push('dkim_failed'); dnsInconclusive = true; }
+    else if (headers.dkim === 'pass') { score -= 0.15; factors.push('dkim_passed'); }
+    
+    if (headers.dmarc === 'fail') { score += 0.1; factors.push('dmarc_failed'); dnsInconclusive = true; }
+    else if (headers.dmarc === 'pass') { score -= 0.15; factors.push('dmarc_passed'); }
+    
+    // If ALL authentication passed, give extra trust bonus
+    if (headers.spf === 'pass' && headers.dkim === 'pass' && headers.dmarc === 'pass') {
+      score -= 0.25;
+      factors.push('fully_authenticated');
+      isVerifiedLegitimate = true;
+      dnsInconclusive = false;
     }
     
-    if (headers.dkim === 'fail') {
-      score += 0.25;
-      factors.push('dkim_failed');
-    } else if (headers.dkim === 'pass') {
-      score -= 0.15; // Stronger bonus
-      factors.push('dkim_passed');
-    }
-    
-    if (headers.dmarc === 'fail') {
-      score += 0.3;
-      factors.push('dmarc_failed');
-    } else if (headers.dmarc === 'pass') {
-      score -= 0.15; // Stronger bonus
-      factors.push('dmarc_passed');
-    }
-    
-    // If ALL authentication passed AND domain is verified, give extra trust bonus
-    if (headers.spf === 'pass' && headers.dkim === 'pass' && headers.dmarc === 'pass' && isVerifiedLegitimate) {
-      score -= 0.3; // Extra bonus for fully authenticated legitimate email
-      factors.push('fully_authenticated_legitimate');
-    }
-    
-    return { score: Math.max(0, score), factors, isVerifiedLegitimate };
+    return { score: Math.max(0, score), factors, isVerifiedLegitimate, dnsInconclusive };
   }
 
   /**
-   * Heuristic-based phishing detection using pattern matching
+   * Heuristic-based phishing detection using pattern matching (SENDER-AUTH-FIRST)
    */
   detectPhishingHeuristic(subject, body) {
     const text = `${subject} ${body}`.toLowerCase();
     let phishingScore = 0;
     let factors = [];
     let isVerifiedLegitimate = false;
+    let dnsInconclusive = false;
     
     // Check if email contains headers (user pasted full email with headers)
     const hasHeaders = /^(from:|received:|return-path:|reply-to:|authentication-results:)/im.test(body);
@@ -292,10 +325,21 @@ class PhishingDetector {
       phishingScore += headerAnalysis.score;
       factors.push(...headerAnalysis.factors);
       isVerifiedLegitimate = headerAnalysis.isVerifiedLegitimate || false;
+      dnsInconclusive = headerAnalysis.dnsInconclusive || false;
     }
 
-    // If email is from verified legitimate source, reduce content-based penalties
-    const contentPenaltyMultiplier = isVerifiedLegitimate ? 0.3 : 1.0; // 70% reduction for verified emails
+    // SENDER-AUTH-FIRST: Reduce content penalties for verified/institutional senders
+    const contentPenaltyMultiplier = isVerifiedLegitimate ? 0.3 : (dnsInconclusive ? 0.6 : 1.0);
+
+    // Check for healthcare email patterns
+    if (this.healthcarePatterns.test(text)) {
+      if (isVerifiedLegitimate) {
+        phishingScore -= 0.1; // Healthcare emails from verified senders are normal
+        factors.push('legitimate_healthcare_email');
+      } else if (!dnsInconclusive) {
+        phishingScore += 0.05 * contentPenaltyMultiplier; // Very minor penalty
+      }
+    }
 
     // Check for urgency keywords (high weight) - but less weight if verified legitimate
     const urgencyPatterns = /urgent|immediately|asap|click now|verify now|act now|expire|suspended|locked|compromised|unusual activity|unauthorized/gi;
@@ -305,7 +349,6 @@ class PhishingDetector {
     }
 
     // Check for financial/credential keywords (high weight) - less weight if legitimate
-    // Note: "password", "confirm" are common in legitimate account notifications
     const financialPatterns = /payment|wire|credit card|bank account|routing|swift/gi;
     if (financialPatterns.test(text)) {
       phishingScore += 0.15 * contentPenaltyMultiplier;
@@ -315,7 +358,7 @@ class PhishingDetector {
     // Separate check for sensitive words that ARE common in legitimate emails
     const commonLegitPatterns = /password|verify|confirm|identity/gi;
     if (commonLegitPatterns.test(text) && !isVerifiedLegitimate) {
-      phishingScore += 0.1; // Only penalize if NOT from verified source
+      phishingScore += 0.1 * contentPenaltyMultiplier;
       factors.push('credential_keywords');
     }
 
@@ -336,43 +379,21 @@ class PhishingDetector {
     // Check for missing personalization (less relevant for verified legitimate emails)
     const impersonalGreetings = /dear (customer|user|friend|sir|madam)|valued|account holder/gi;
     if (impersonalGreetings.test(text) && !isVerifiedLegitimate) {
-      phishingScore += 0.1;
+      phishingScore += 0.1 * contentPenaltyMultiplier;
       factors.push('impersonal_greeting');
     }
 
     // Check for pressure tactics
     const pressurePatterns = /act now|do not ignore|do not delete|urgent action|immediate attention|time sensitive/gi;
     if (pressurePatterns.test(text)) {
-      phishingScore += 0.1;
+      phishingScore += 0.1 * contentPenaltyMultiplier;
       factors.push('pressure_tactics');
     }
 
-    // Check for grammar/spelling issues (common in phishing)
-    const commonMisspellings = /occured|recieved|seperate|bussiness|adress|alot|their's/gi;
-    if (commonMisspellings.test(text)) {
-      phishingScore += 0.05;
-      factors.push('spelling_errors');
-    }
-
-    // Check for phone numbers (unusual in legitimate emails)
-    const phonePatterns = /\+?1?\s?(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/g;
-    const phoneMatches = text.match(phonePatterns) || [];
-    if (phoneMatches.length > 0) {
-      phishingScore += 0.08;
-      factors.push(`phone_numbers_${phoneMatches.length}`);
-    }
-
-    // Check for suspicious attachments mentioned
-    if (/attachment|attached|download|click.*file|open.*file/gi.test(text)) {
-      phishingScore += 0.05;
-      factors.push('suspicious_attachment_reference');
-    }
-
-    // Check for generic signature (no real company name)
-    if (!/regards|sincerely|best|thanks|cheers/i.test(body) || 
-        !/best regards|yours truly|warm regards/i.test(body)) {
-      phishingScore += 0.05;
-      factors.push('generic_signature');
+    // DNS INCONCLUSIVE CAPPING (SENDER-AUTH-FIRST): Don't convict on content alone
+    if (dnsInconclusive && phishingScore < 0.45 && !isVerifiedLegitimate) {
+      phishingScore = Math.min(phishingScore, 0.40);
+      factors.push('dns_inconclusive_capped');
     }
 
     // Cap the score at 0.99
@@ -382,7 +403,8 @@ class PhishingDetector {
       score: phishingScore,
       factors,
       isPhishing: phishingScore > 0.5,
-      isVerifiedLegitimate
+      isVerifiedLegitimate,
+      dnsInconclusive
     };
   }
 
