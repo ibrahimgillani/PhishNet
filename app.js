@@ -903,12 +903,14 @@ class ScanManager {
   }
 
   async callBackendScan(value, type) {
-    const API_BASE = window.API_CONFIG?.api?.baseURL || window.CONFIG?.API_BASE_URL || 'http://localhost:3000';
+    const API_BASE = window.API_CONFIG?.api?.baseURL || 'http://localhost:5000';
+    const token = localStorage.getItem('token');
+    const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
     
     if (type === 'email') {
-      const response = await fetch(`${API_BASE}/api/scan/email`, {
+      const response = await fetch(`${API_BASE}/api/v1/emails/scan`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ emailContent: value })
       });
       
@@ -940,9 +942,9 @@ class ScanManager {
         }
       };
     } else if (type === 'url') {
-      const response = await fetch(`${API_BASE}/api/scan/scan-url`, {
+      const response = await fetch(`${API_BASE}/api/v1/urls/scan`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ url: value })
       });
       
@@ -1358,12 +1360,12 @@ class ScanManager {
     if (token) {
       // Logged-in user: send scan to server so it's stored under the user's account
       try {
-        const endpoint = (result.type || '').toString().toLowerCase().includes('email') ? '/api/scan/email' : '/api/scan/url';
+        const endpoint = (result.type || '').toString().toLowerCase().includes('email') ? '/api/v1/emails/scan' : '/api/v1/urls/scan';
         const body = (result.type || '').toString().toLowerCase().includes('email')
           ? { senderEmail: result.senderEmail || 'unknown@local', emailContent: result.value || '', subject: result.subject || '' }
           : { url: result.value };
 
-        const response = await fetch(endpoint, {
+        const response = await fetch(getApiUrl(endpoint), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

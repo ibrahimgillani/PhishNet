@@ -3,25 +3,20 @@
 
 // ==================== ENVIRONMENT CONFIGURATION ====================
 // Auto-detect: use localhost for local development, Render URLs for production
+// Single backend handles everything: auth, scanning, chatbot, analytics
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-// ML Backend (scanning, threat intel)
-const ML_API_BASE_URL = window.ML_API_BASE_URL || (isLocal ? 'http://localhost:3000' : 'https://phishnet-backend-5eqv.onrender.com');
-
-// Auth Backend (MongoDB, users, auth)
-const AUTH_API_BASE_URL = window.AUTH_API_BASE_URL || (isLocal ? 'http://localhost:5000' : 'https://phishnet-auth-backend.onrender.com');
-
-// Legacy support - defaults to Auth backend for compatibility
-const API_BASE_URL = window.API_BASE_URL || AUTH_API_BASE_URL;
+// Single Backend URL (handles auth, scanning, chatbot, analytics — all in one)
+const API_BASE_URL = window.API_BASE_URL || (isLocal ? 'http://localhost:5000' : 'https://phishnet-auth-backend.onrender.com');
 
 // Export configuration object
 const config = {
   api: {
     baseURL: API_BASE_URL,
-    authBaseURL: AUTH_API_BASE_URL,
-    mlBaseURL: ML_API_BASE_URL,
+    authBaseURL: API_BASE_URL,
+    mlBaseURL: API_BASE_URL,
     endpoints: {
-      // Authentication (uses Auth backend - port 5000)
+      // Authentication
       auth: {
         login: '/api/v1/auth/login',
         register: '/api/v1/auth/signup',
@@ -29,22 +24,22 @@ const config = {
         refreshToken: '/api/v1/auth/refresh-token',
         verify: '/api/v1/auth/verify'
       },
-      // Users (uses Auth backend - port 5000)
+      // Users
       users: {
         profile: '/api/v1/users/profile',
         history: '/api/v1/urls/history',
         update: '/api/v1/users/profile',
         settings: '/api/v1/users/settings'
       },
-      // Scanning - DistilBERT Phishing Detection (uses ML backend - port 3000)
+      // Scanning (multi-source threat intel)
       scan: {
-        url: '/api/scan/scan-url',
-        email: '/api/scan/email',
-        domain: '/api/scan/domain',
-        batch: '/api/scan/batch',
-        modelInfo: '/api/scan/model-info'
+        url: '/api/v1/urls/scan',
+        email: '/api/v1/emails/scan',
+        domain: '/api/v1/urls/scan',
+        batch: '/api/v1/urls/scan',
+        modelInfo: '/health'
       },
-      // Save scan results to history (uses Auth backend - port 5000)
+      // Save scan results to history
       history: {
         saveUrl: '/api/v1/urls/check',
         saveEmail: '/api/v1/urls/check'
@@ -53,9 +48,9 @@ const config = {
       dashboard: {
         securityTips: '/api/dashboard/security-tips'
       },
-      // Analytics (uses Auth backend - port 5000)
+      // Analytics
       analytics: {
-        stats: '/api/analytics/stats'
+        stats: '/api/v1/analytics/stats'
       },
       // Chatbot
       chatbot: {
@@ -71,23 +66,8 @@ const config = {
 };
 
 // Helper function to build full API URLs
-// Auth endpoints use port 5000 (MongoDB backend), scan endpoints use port 3000 (ML backend)
+// All endpoints go to the single backend
 function getApiUrl(endpoint) {
-  // Auth, user, and URL endpoints go to Auth backend (port 5000)
-  if (endpoint.startsWith('/api/v1/auth') || 
-      endpoint.startsWith('/api/v1/users') || 
-      endpoint.startsWith('/api/v1/urls') ||
-      endpoint.startsWith('/api/v1/analytics') ||
-      endpoint.startsWith('/api/auth') || 
-      endpoint.startsWith('/api/users') || 
-      endpoint.startsWith('/api/analytics')) {
-    return `${config.api.authBaseURL}${endpoint}`;
-  }
-  // Scan endpoints go to ML backend (port 3000)
-  if (endpoint.startsWith('/api/scan')) {
-    return `${config.api.mlBaseURL}${endpoint}`;
-  }
-  // Default to base URL
   return `${config.api.baseURL}${endpoint}`;
 }
 

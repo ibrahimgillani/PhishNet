@@ -317,14 +317,14 @@ class ScanningSystem {
       } else {
         // Logged-in user: send scan to Auth backend (port 5000) so it's stored under the user's account
         try {
-          // Use Auth backend's /api/scan/url or /api/scan/email endpoint to save to MongoDB
+          // Use backend /api/v1/urls/check endpoint to save to MongoDB
           const isEmail = String(scan.type || '').toLowerCase().includes('email');
           const saveEndpoint = isEmail 
-            ? (window.API_CONFIG.api.endpoints.history?.saveEmail || '/api/scan/email')
-            : (window.API_CONFIG.api.endpoints.history?.saveUrl || '/api/scan/url');
+            ? (window.API_CONFIG.api.endpoints.history?.saveEmail || '/api/v1/urls/check')
+            : (window.API_CONFIG.api.endpoints.history?.saveUrl || '/api/v1/urls/check');
           
-          // Build the full URL to the Auth backend (port 5000)
-          const endpoint = `${window.API_CONFIG.api.authBaseURL}${saveEndpoint}`;
+          // Build the full URL to the backend
+          const endpoint = getApiUrl(saveEndpoint);
 
           // Build an enriched body containing analysis fields so server persists UI classification
           // Normalize frontend threat labels to server-expected enums to avoid validation errors
@@ -720,7 +720,7 @@ class ScanningSystem {
 
   /**
    * Call the full 9-source threat intelligence scanner (extension backend)
-   * Falls back to ML backend (port 3000) if 9-source scanner is unavailable
+   * Uses the single backend's multi-source threat intel scanner
    */
   async scanUrlViaBackend(url) {
     console.log('[scanUrlViaBackend] Sending scan request to 9-source scanner', { url });
@@ -785,33 +785,12 @@ class ScanningSystem {
       if (response.ok && data.success !== false) {
         return data;
       }
-      console.warn('[scanUrlViaBackend] 9-source scanner returned error, falling back to ML backend');
+      console.warn('[scanUrlViaBackend] 9-source scanner returned error');
     } catch (err) {
-      console.warn('[scanUrlViaBackend] 9-source scanner unavailable, falling back to ML backend:', err.message);
+      console.warn('[scanUrlViaBackend] 9-source scanner unavailable:', err.message);
     }
 
-    // Fallback: use the ML backend scanner on port 3000
-    const mlScanEndpoint = window.API_CONFIG?.api?.endpoints?.scan?.url || '/api/scan/scan-url';
-    const mlScanUrl = `${window.API_CONFIG?.api?.mlBaseURL || 'http://localhost:3000'}${mlScanEndpoint}`;
-    console.log('[scanUrlViaBackend] Calling ML backend fallback:', mlScanUrl);
-
-    const mlResponse = await fetch(mlScanUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      },
-      body: JSON.stringify({ url })
-    });
-
-    const mlData = await mlResponse.json().catch(() => ({}));
-    console.log('[scanUrlViaBackend] ML backend response', { status: mlResponse.status, ok: mlResponse.ok, mlData });
-    if (!mlResponse.ok || mlData.success === false) {
-      console.error('[scanUrlViaBackend] ML backend also failed:', mlData);
-      throw new Error(mlData?.message || 'Failed to scan URL — both backends unavailable');
-    }
-
-    return mlData;
+    throw new Error('Failed to scan URL — backend unavailable');
   }
 
   /**
@@ -1236,14 +1215,14 @@ class ScanningSystem {
    * Call backend email scan endpoint (PhishingDistilBERT model)
    */
   async scanEmailViaBackend(emailContent) {
-    const API_BASE = window.API_CONFIG?.api?.mlBaseURL || window.CONFIG?.API_BASE_URL || 'http://localhost:3000';
+    const API_BASE = window.API_CONFIG?.api?.baseURL || 'http://localhost:5000';
 
     // Try to parse subject from pasted email content (raw headers)
     let parsedSubject = '';
     const subjectMatch = emailContent.match(/^Subject:\s*(.+)$/im);
     if (subjectMatch) parsedSubject = subjectMatch[1].trim();
     
-    const response = await fetch(`${API_BASE}/api/scan/email`, {
+    const response = await fetch(`${API_BASE}/api/v1/emails/scan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -2366,7 +2345,7 @@ class ScanningSystem {
     if (token) {
       // Try to delete on server for logged-in users
       try {
-        const deleteUrl = getApiUrl(`/api/scan/${id}`);
+        const deleteUrl = getApiUrl(`/api/v1/urls/${id}`);
         const response = await fetch(deleteUrl, {
           method: 'DELETE',
           headers: {
