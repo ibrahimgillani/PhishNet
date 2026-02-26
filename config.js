@@ -2,15 +2,14 @@
 // This file contains all configuration for the frontend application
 
 // ==================== ENVIRONMENT CONFIGURATION ====================
-// Change this URL based on your environment:
-// - Development: http://localhost:3000 (ML backend), http://localhost:5000 (Auth backend)
-// - Production: https://phishnet-backend-5eqv.onrender.com
+// Auto-detect: use localhost for local development, Render URLs for production
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
 // ML Backend (scanning, threat intel)
-const ML_API_BASE_URL = window.ML_API_BASE_URL || 'https://phishnet-backend-5eqv.onrender.com';
+const ML_API_BASE_URL = window.ML_API_BASE_URL || (isLocal ? 'http://localhost:3000' : 'https://phishnet-backend-5eqv.onrender.com');
 
 // Auth Backend (MongoDB, users, auth)
-const AUTH_API_BASE_URL = window.AUTH_API_BASE_URL || 'https://phishnet-auth-backend.onrender.com';
+const AUTH_API_BASE_URL = window.AUTH_API_BASE_URL || (isLocal ? 'http://localhost:5000' : 'https://phishnet-auth-backend.onrender.com');
 
 // Legacy support - defaults to Auth backend for compatibility
 const API_BASE_URL = window.API_BASE_URL || AUTH_API_BASE_URL;
