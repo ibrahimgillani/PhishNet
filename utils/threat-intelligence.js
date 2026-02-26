@@ -123,23 +123,21 @@ class ThreatIntelligence {
       /(?:call|contact).*(?:support|helpdesk|technician)/i
     ];
 
-    // Known legitimate domains (whitelist)
+    // Known legitimate domains (whitelist) — match base domains, not individual subdomains
     this.whitelistedDomains = [
-      'google.com', 'www.google.com', 'accounts.google.com',
-      'facebook.com', 'www.facebook.com',
-      'amazon.com', 'www.amazon.com',
-      'apple.com', 'www.apple.com', 'icloud.com',
-      'microsoft.com', 'www.microsoft.com', 'outlook.com', 'office.com',
-      'paypal.com', 'www.paypal.com',
-      'netflix.com', 'www.netflix.com',
-      'twitter.com', 'x.com',
-      'instagram.com', 'www.instagram.com',
-      'linkedin.com', 'www.linkedin.com',
-      'github.com', 'www.github.com',
-      'stackoverflow.com',
-      'youtube.com', 'www.youtube.com',
-      'wikipedia.org', 'en.wikipedia.org',
-      'reddit.com', 'www.reddit.com'
+      'google.com', 'facebook.com', 'amazon.com', 'apple.com',
+      'microsoft.com', 'paypal.com', 'netflix.com', 'twitter.com', 'x.com',
+      'instagram.com', 'linkedin.com', 'github.com', 'stackoverflow.com',
+      'youtube.com', 'wikipedia.org', 'reddit.com', 'yahoo.com', 'bing.com',
+      'dropbox.com', 'icloud.com', 'outlook.com', 'office.com', 'live.com',
+      'whatsapp.com', 'telegram.org', 'discord.com', 'spotify.com',
+      'twitch.tv', 'zoom.us', 'slack.com', 'notion.so', 'figma.com', 'canva.com',
+      'cloudflare.com', 'amazonaws.com', 'azure.com', 'heroku.com',
+      'vercel.app', 'netlify.app', 'npmjs.com', 'golang.org', 'python.org',
+      'mozilla.org', 'w3.org', 'steampowered.com', 'ebay.com', 'walmart.com',
+      'target.com', 'bestbuy.com', 'chase.com', 'wellsfargo.com',
+      'bankofamerica.com', 'citi.com', 'adobe.com', 'salesforce.com',
+      'oracle.com', 'ibm.com', 'replit.com'
     ];
 
     // Malicious TLDs (high risk)
@@ -281,20 +279,20 @@ class ThreatIntelligence {
         results.riskFactors.push(`High-risk TLD: ${tldRisk.tld}`);
       }
 
-      // Whitelist bonus (reduces risk and clears risk factors for trusted domains)
-      const isWhitelisted = this.whitelistedDomains.includes(hostname) || this.whitelistedDomains.includes(domain);
+      // Whitelist check — apply risk REDUCTION, not absolute override.
+      // Compromised legitimate domains will still be flagged.
+      const hostnameClean = hostname.replace(/^www\./, '');
+      const domainClean = (domain || '').replace(/^www\./, '');
+      const isWhitelisted = this.whitelistedDomains.some(td =>
+        hostnameClean === td || domainClean === td ||
+        hostnameClean.endsWith('.' + td) || domainClean.endsWith('.' + td)
+      );
       if (isWhitelisted) {
-        riskScore = Math.max(0, riskScore - 50);
-        // For whitelisted domains, move this to safety indicators, not risk factors
+        const TRUST_MULTIPLIER = 0.15;
+        riskScore = Math.round(riskScore * TRUST_MULTIPLIER);
         if (!results.safetyIndicators) results.safetyIndicators = [];
-        results.safetyIndicators.push('Domain is whitelisted (trusted)');
-        // Clear misleading risk factors for trusted domains
-        results.riskFactors = results.riskFactors.filter(f => 
-          !f.includes('No SPF') && 
-          !f.includes('No DMARC') && 
-          !f.includes('Domain registered') &&
-          !f.includes('whitelisted')
-        );
+        results.safetyIndicators.push(`Domain is whitelisted (risk reduced ×0.15)`);
+        // Keep riskFactors for visibility — don't clear them
       }
 
       results.riskScore = Math.min(100, Math.max(0, riskScore));

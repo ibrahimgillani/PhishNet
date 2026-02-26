@@ -11,8 +11,8 @@ let currentAvatarURL = null;
 
 const tokenKey = 'token';
 
-// Get API base URL from config.js
-const apiBase = (window.API_CONFIG && window.API_CONFIG.api.baseURL) || 'http://localhost:3000';
+// Get API base URL from config.js — use authBaseURL for user endpoints (port 5000)
+const apiBase = (window.API_CONFIG && window.API_CONFIG.api.authBaseURL) || (window.API_CONFIG && window.API_CONFIG.api.baseURL) || 'http://localhost:5000';
 
 // Debounce helper to prevent rapid API calls
 function debounce(func, wait) {
@@ -207,7 +207,8 @@ avatarFile?.addEventListener('change', (e) => {
 
 
 // Update avatar preview
-function updateAvatarPreview(imageURL, fitMode = 'cover') {
+function updateAvatarPreview(imageURL, fitMode = 'cover', userOverride) {
+  if (!settingsAvatarPreview) return;
   if (imageURL) {
     // Add cache-busting timestamp and clear old image first
     settingsAvatarPreview.style.backgroundImage = '';
@@ -225,8 +226,9 @@ function updateAvatarPreview(imageURL, fitMode = 'cover') {
     settingsAvatarPreview.style.backgroundRepeat = 'no-repeat';
     settingsAvatarPreview.textContent = '';
   } else {
-    const user = getStoredUser();
-    let initials = 'JD';
+    // Use provided user object first, then fall back to stored user
+    const user = userOverride || getStoredUser();
+    let initials = '';
 
     if (user.initials) {
       initials = user.initials;
@@ -234,15 +236,19 @@ function updateAvatarPreview(imageURL, fitMode = 'cover') {
       initials = (user.firstName[0] + user.lastName[0]).toUpperCase();
     } else if (user.name) {
       initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase();
+    } else if (user.email) {
+      const name = user.email.split('@')[0];
+      const parts = name.split(/[._-]/);
+      initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.substring(0, 2).toUpperCase();
     }
 
     settingsAvatarPreview.style.backgroundImage = '';
-    settingsAvatarPreview.textContent = initials;
+    settingsAvatarPreview.textContent = initials || '?';
   }
 }
 
 // Update header avatar across all pages
-function updateHeaderAvatar(imageURL, fitMode) {
+function updateHeaderAvatar(imageURL, fitMode, userOverride) {
   const headerAvatar = document.querySelector('.user-avatar');
   if (!headerAvatar) return;
   
@@ -261,8 +267,8 @@ function updateHeaderAvatar(imageURL, fitMode) {
     headerAvatar.style.backgroundRepeat = 'no-repeat';
     headerAvatar.textContent = '';
   } else {
-    const user = window.auth?.getUser?.() || getStoredUser();
-    let initials = 'JD';
+    const user = userOverride || window.auth?.getUser?.() || getStoredUser();
+    let initials = '';
 
     if (user.initials) {
       initials = user.initials;
@@ -270,10 +276,14 @@ function updateHeaderAvatar(imageURL, fitMode) {
       initials = (user.firstName[0] + user.lastName[0]).toUpperCase();
     } else if (user.name) {
       initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase();
+    } else if (user.email) {
+      const name = user.email.split('@')[0];
+      const parts = name.split(/[._-]/);
+      initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.substring(0, 2).toUpperCase();
     }
 
     headerAvatar.style.backgroundImage = '';
-    headerAvatar.textContent = initials;
+    headerAvatar.textContent = initials || '?';
   }
 }
 
@@ -293,7 +303,7 @@ avatarRemoveBtn?.addEventListener('click', async () => {
       avatarRemoveBtn.disabled = true;
     }
 
-    const result = await authFetch(`${apiBase}/api/users/profile/avatar`, {
+    const result = await authFetch(`${apiBase}/api/v1/users/profile/avatar`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ remove: true }),
@@ -304,7 +314,7 @@ avatarRemoveBtn?.addEventListener('click', async () => {
     localStorage.removeItem('userAvatar');
     localStorage.removeItem('avatarFitMode');
     avatarFile.value = '';
-    updateAvatarPreview(null);
+    updateAvatarPreview(null, 'cover', getStoredUser());
     updateHeaderAvatar(null, null);
 
     if (result?.data?.user) {
@@ -342,7 +352,7 @@ async function loadAndSyncProfile() {
   try {
     // Always fetch fresh data from server on page load to ensure latest image is shown
     // This prevents showing stale cached images when avatar is updated
-    const result = await authFetch(`${apiBase}/api/users/profile`);
+    const result = await authFetch(`${apiBase}/api/v1/users/profile`);
     console.log('Profile fetched from server:', {
       hasUser: !!result?.data?.user,
       hasAvatar: !!result?.data?.user?.avatar,
@@ -374,7 +384,7 @@ async function loadAndSyncProfile() {
 // Fetch profile data in the background without blocking UI
 async function fetchAndSyncProfileInBackground() {
   try {
-    const result = await authFetch(`${apiBase}/api/users/profile`);
+    const result = await authFetch(`${apiBase}/api/v1/users/profile`);
     const user = result?.data?.user;
     if (user) {
       syncUserState(user);
@@ -431,8 +441,8 @@ function applyProfileToFormImmediate(user = {}) {
     currentAvatarURL = null;
     window.currentUserAvatar = null;
     console.log('No avatar found for user');
-    updateAvatarPreview(null);
-    updateHeaderAvatar(null, null);
+    updateAvatarPreview(null, 'cover', user);
+    updateHeaderAvatar(null, null, user);
   }
 
   if (firstNameEl && user.firstName) firstNameEl.value = user.firstName;
@@ -614,7 +624,7 @@ profileForm?.addEventListener('submit', async (e) => {
   }
   
   try {
-    const result = await authFetch(`${apiBase}/api/users/profile`, {
+    const result = await authFetch(`${apiBase}/api/v1/users/profile`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ firstName, lastName, email }),
@@ -626,7 +636,7 @@ profileForm?.addEventListener('submit', async (e) => {
       applyProfileToForm(result.data.user);
 
       if (!result.data.user.avatar) {
-        updateAvatarPreview(null);
+        updateAvatarPreview(null, 'cover', result.data.user);
       }
     }
 
@@ -639,7 +649,7 @@ profileForm?.addEventListener('submit', async (e) => {
         savedAvatarLength: result?.data?.user?.avatar?.length
       });
       
-      const avatarResult = await authFetch(`${apiBase}/api/users/profile/avatar`, {
+      const avatarResult = await authFetch(`${apiBase}/api/v1/users/profile/avatar`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ avatar: currentAvatarURL, fitMode: 'cover' }),
@@ -723,7 +733,7 @@ passwordForm?.addEventListener('submit', async (e) => {
   }
   
   try {
-    await authFetch(`${apiBase}/api/users/password`, {
+    await authFetch(`${apiBase}/api/v1/users/password`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),

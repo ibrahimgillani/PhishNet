@@ -8,11 +8,16 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import phishingDetector from './models/phishing-detector.js';
 import scanRoutes from './routes/scan.js';
 
 // Load environment variables
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,8 +25,19 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // ==================== MIDDLEWARE ====================
 
-// Security Headers
-app.use(helmet());
+// Security Headers - allow cross-origin requests to auth backend
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https:"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https:"],
+      fontSrc: ["'self'", "https:", "data:"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      connectSrc: ["'self'", "http://localhost:*", "http://127.0.0.1:*", "https:"],
+    }
+  }
+}));
 
 // CORS Configuration - Allow all origins for browser extension compatibility
 const corsOptions = {
@@ -53,13 +69,13 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Rate limiting
+// Rate limiting — only applied to API routes, not static files
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
   message: 'Too many requests from this IP, please try again later.'
 });
-app.use(limiter);
+app.use('/api', limiter);
 
 // Request logging
 app.use((req, res, next) => {
@@ -68,6 +84,12 @@ app.use((req, res, next) => {
 });
 
 // ==================== ROUTES ====================
+
+// Serve static website files (signup.html, dashboard.html, etc.)
+app.use(express.static(__dirname, {
+  extensions: ['html'],
+  index: 'index.html'
+}));
 
 // Health check
 app.get('/health', (req, res) => {

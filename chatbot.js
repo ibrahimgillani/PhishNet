@@ -239,7 +239,13 @@ class PhishNetChatbot {
     this.showTyping();
 
     try {
-      // Call backend API
+      // Build recent conversation history for Gemini context
+      const chatHistory = this.messages.slice(-10).map(m => ({
+        role: m.sender === 'bot' ? 'model' : 'user',
+        text: m.text
+      }));
+
+      // Call backend API (Gemini-powered)
       const response = await fetch(getApiUrl(window.API_CONFIG.api.endpoints.chatbot.message), {
         method: 'POST',
         headers: {
@@ -247,6 +253,7 @@ class PhishNetChatbot {
         },
         body: JSON.stringify({
           message,
+          history: chatHistory,
           attachments: this.pendingAttachments.length > 0 ? this.pendingAttachments : null,
         }),
       });

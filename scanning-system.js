@@ -32,6 +32,28 @@ class ScanningSystem {
     if (window.location.pathname.includes('dashboard.html')) {
       console.log('[ScanningSystem] Initializing dashboard...');
       this.initDashboard();
+
+      // Refresh scan history when user navigates back to dashboard (bfcache/tab switch)
+      const self = this;
+      document.addEventListener('visibilitychange', function dashVisRefresh() {
+        if (document.visibilityState === 'visible' && window.location.pathname.includes('dashboard.html')) {
+          console.log('[ScanningSystem] Dashboard became visible — refreshing scan history');
+          self.loadScanHistory().then(() => {
+            self.updateDashboardTable();
+            if (typeof window.refreshDashboardData === 'function') window.refreshDashboardData();
+          }).catch(() => {});
+        }
+      });
+      // Also handle bfcache (back/forward navigation)
+      window.addEventListener('pageshow', function(e) {
+        if (e.persisted && window.location.pathname.includes('dashboard.html')) {
+          console.log('[ScanningSystem] Page restored from bfcache — refreshing scan history');
+          self.loadScanHistory().then(() => {
+            self.updateDashboardTable();
+            if (typeof window.refreshDashboardData === 'function') window.refreshDashboardData();
+          }).catch(() => {});
+        }
+      });
     }
 
     // Only initialize reports on reports.html
@@ -46,6 +68,7 @@ class ScanningSystem {
    */
   mapThreatLevel(threatLevel) {
     if (threatLevel === 'safe') return 'safe';
+    if (threatLevel === 'unsafe' || threatLevel === 'phishing' || threatLevel === 'threat') return 'malicious';
     if (threatLevel === 'low' || threatLevel === 'medium') return 'suspicious';
     if (threatLevel === 'high' || threatLevel === 'critical') return 'malicious';
     return 'safe'; // default
@@ -65,7 +88,7 @@ class ScanningSystem {
         return;
       }
 
-      const response = await fetch(getApiUrlWithParams(window.API_CONFIG.api.endpoints.users.history, { limit: 100 }), {
+      const response = await fetch(getApiUrlWithParams(window.API_CONFIG.api.endpoints.users.history, { limit: 500 }), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -100,10 +123,10 @@ class ScanningSystem {
                 })(),
                 threat: normalizedThreat || 'safe',
                 threatType: item.threatType,
-                confidence: item.confidence,
-                timestamp: new Date(item.checkedAt).getTime(),
-                date: new Date(item.checkedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
-                time: new Date(item.checkedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+                confidence: item.confidence ?? (item.threatScore != null ? (item.status === 'safe' ? Math.max(0, 100 - item.threatScore) : Math.min(100, Math.max(item.threatScore, 50))) : (() => { const t = (item.threatLevel || item.threat || item.status || '').toString().toLowerCase(); if (t === 'safe') return 95; if (['unsafe','phishing','threat','high','critical','malicious'].includes(t)) return 85; if (['medium','suspicious','low'].includes(t)) return 70; return null; })()),
+                timestamp: new Date(item.checkedAt || item.timestamp || item.createdAt || Date.now()).getTime(),
+                date: new Date(item.checkedAt || item.timestamp || item.createdAt || Date.now()).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+                time: new Date(item.checkedAt || item.timestamp || item.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
                 indicators: item.indicators || [],
                 issues: item.issues || [],
                 summary: item.summary || '',
@@ -133,8 +156,16 @@ class ScanningSystem {
             try {
               if (!local || !local.value) return true;
               const localTs = Number(local.timestamp) || 0;
+              const localIsEmail = String(local.type || '').toLowerCase().includes('email');
               const duplicate = serverItems.some(srv => {
                 const srvTs = Number(srv.timestamp) || 0;
+                // For email scans: server stores senderEmail as value, local stores full body.
+                // Match by senderEmail + close timestamp OR by value match.
+                if (localIsEmail && String(srv.type || '').toLowerCase().includes('email')) {
+                  const localSender = local.senderEmail || '';
+                  const srvSender = srv.senderEmail || srv.value || '';
+                  if (localSender && srvSender && localSender.toLowerCase() === srvSender.toLowerCase() && Math.abs(srvTs - localTs) < 30000) return true;
+                }
                 return String((srv.value||'').trim()) === String((local.value||'').trim()) && Math.abs(srvTs - localTs) < 5000;
               });
               return !duplicate;
@@ -168,7 +199,47 @@ class ScanningSystem {
           });
 
           this.scanHistory = [...serverItems, ...remainingLocal];
-          console.log(`[ScanningSystem] Loaded ${this.scanHistory.length} scans from server`);
+          // Merge cached rich scan data (sourceDetails, contributions, etc.)
+          this._mergeRichScanCache(this.scanHistory);
+          console.log(`[ScanningSystem] Loaded ${this.scanHistory.length} scans from server (with rich cache merged)`);
+
+          // ── Background sync: upload any remaining local-only entries to server ──
+          // This ensures scans that previously failed to save to MongoDB are retried.
+          if (remainingLocal.length > 0 && token) {
+            console.log(`[ScanningSystem] Background-syncing ${remainingLocal.length} local-only scans to server...`);
+            const saveEndpoint = `${window.API_CONFIG?.api?.authBaseURL || 'http://localhost:5000'}${window.API_CONFIG?.api?.endpoints?.history?.saveUrl || '/api/v1/urls/check'}`;
+            Promise.allSettled(remainingLocal.map(scan => {
+              const body = {
+                url: scan.value || scan.url || '',
+                status: (scan.threat === 'safe' || scan.status === 'safe') ? 'safe' : 'unsafe',
+                reasons: scan.indicators || [],
+                userAction: 'visited',
+                wasWarned: scan.threat !== 'safe',
+                confidence: scan.confidence || null,
+                threatLevel: (() => { const t = String(scan.threat || scan.threatLevel || 'safe').toLowerCase(); return { suspicious: 'medium', malicious: 'high' }[t] || (['safe','low','medium','high','critical'].includes(t) ? t : 'low'); })(),
+                threatType: scan.threatType || null,
+                isSafe: scan.threat === 'safe' || scan.status === 'safe',
+                scanType: scan.type || 'url',
+                summary: scan.summary || '',
+                indicators: scan.indicators || [],
+                issues: scan.issues || [],
+                details: scan.details || null,
+                senderEmail: scan.senderEmail || null
+              };
+              return fetch(saveEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(body)
+              }).catch(() => {});
+            })).then(results => {
+              const synced = results.filter(r => r.status === 'fulfilled').length;
+              console.log(`[ScanningSystem] Background sync: ${synced}/${remainingLocal.length} local scans synced`);
+              // Clear localStorage scanHistory since everything should now be on the server
+              if (synced === remainingLocal.length) {
+                localStorage.removeItem('scanHistory');
+              }
+            });
+          }
         } else {
           console.error('[ScanningSystem] Failed to load scan history (API error):', data.message);
           // Fallback to localStorage if server responded but with failure
@@ -197,6 +268,8 @@ class ScanningSystem {
       const storedHistory = localStorage.getItem('scanHistory');
       this.scanHistory = storedHistory ? JSON.parse(storedHistory) : [];
     }
+    // Signal that history loading is complete (used by dashboard-data.js waitForScanHistory)
+    this._historyLoaded = true;
   }
 
   /**
@@ -232,80 +305,112 @@ class ScanningSystem {
     const token = localStorage.getItem('token');
 
     if (token) {
-      // Logged-in user: send scan to Auth backend (port 5000) so it's stored under the user's account
-      try {
-        // Use Auth backend's /api/scan/url or /api/scan/email endpoint to save to MongoDB
-        const isEmail = String(scan.type || '').toLowerCase().includes('email');
-        const saveEndpoint = isEmail 
-          ? (window.API_CONFIG.api.endpoints.history?.saveEmail || '/api/scan/email')
-          : (window.API_CONFIG.api.endpoints.history?.saveUrl || '/api/scan/url');
-        
-        // Build the full URL to the Auth backend (port 5000)
-        const endpoint = `${window.API_CONFIG.api.authBaseURL}${saveEndpoint}`;
+      // ── Check if the scan was already persisted by the /scan route ──
+      // When scanUrlViaBackend returns { savedToDb: true }, the scan route
+      // already wrote the record to MongoDB.  Posting again to /check would
+      // create a duplicate.  In that case we only cache rich data & reload.
+      const alreadySavedToDb = scan._savedToDb === true;
 
-        // Build an enriched body containing analysis fields so server persists UI classification
-        // Normalize frontend threat labels to server-expected enums to avoid validation errors
-        let outgoingThreat = scan.status || scan.threat || scan.threatLevel || 'safe';
-        outgoingThreat = String(outgoingThreat || '').toLowerCase();
-        const threatLevelMap = { suspicious: 'medium', malicious: 'high' };
-        if (!['safe', 'low', 'medium', 'high', 'critical'].includes(outgoingThreat)) {
-          outgoingThreat = threatLevelMap[outgoingThreat] || 'low';
-        }
+      if (alreadySavedToDb) {
+        console.log('[ScanningSystem] Scan already saved by /scan route — skipping /check POST');
+        this._cacheRichScanData(scan);
+      } else {
+        // Logged-in user: send scan to Auth backend (port 5000) so it's stored under the user's account
+        try {
+          // Use Auth backend's /api/scan/url or /api/scan/email endpoint to save to MongoDB
+          const isEmail = String(scan.type || '').toLowerCase().includes('email');
+          const saveEndpoint = isEmail 
+            ? (window.API_CONFIG.api.endpoints.history?.saveEmail || '/api/scan/email')
+            : (window.API_CONFIG.api.endpoints.history?.saveUrl || '/api/scan/url');
+          
+          // Build the full URL to the Auth backend (port 5000)
+          const endpoint = `${window.API_CONFIG.api.authBaseURL}${saveEndpoint}`;
 
-        const commonAnalysis = {
-          isSafe: scan.status ? (scan.status === 'safe') : (scan.isSafe === true),
-          threatLevel: outgoingThreat,
-          threatType: scan.threatType || scan.threat || null,
-          confidence: typeof scan.confidence !== 'undefined' ? scan.confidence : (scan.riskPercent || null),
-          indicators: scan.indicators || [],
-          issues: scan.issues || [],
-          summary: scan.summary || scan.details || '',
-          details: scan.details || null,
-          scanType: scan.type || (scan.value && String(scan.value).includes('@') ? 'email' : 'url'),
-          domain: scan.domain || null
-        };
+          // Build an enriched body containing analysis fields so server persists UI classification
+          // Normalize frontend threat labels to server-expected enums to avoid validation errors
+          let outgoingThreat = scan.status || scan.threat || scan.threatLevel || 'safe';
+          outgoingThreat = String(outgoingThreat || '').toLowerCase();
+          const threatLevelMap = { suspicious: 'medium', malicious: 'high' };
+          if (!['safe', 'low', 'medium', 'high', 'critical'].includes(outgoingThreat)) {
+            outgoingThreat = threatLevelMap[outgoingThreat] || 'low';
+          }
 
-        // Extract sender email from email content if not provided
-        const extractSenderEmail = (text) => {
-          if (!text) return '';
-          const emailRegex = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
-          const match = String(text).match(emailRegex);
-          return match ? match[0] : '';
-        };
+          const commonAnalysis = {
+            isSafe: scan.status ? (scan.status === 'safe') : (scan.isSafe === true),
+            threatLevel: outgoingThreat,
+            threatType: scan.threatType || scan.threat || null,
+            confidence: typeof scan.confidence !== 'undefined' ? scan.confidence : (scan.riskPercent || null),
+            indicators: scan.indicators || [],
+            issues: scan.issues || [],
+            summary: scan.summary || scan.details || '',
+            details: scan.details || null,
+            scanType: scan.type || (scan.value && String(scan.value).includes('@') ? 'email' : 'url'),
+            domain: scan.domain || null
+          };
 
-        const body = (String(scan.type || '').toLowerCase().includes('email'))
-          ? Object.assign({}, commonAnalysis, { 
-              senderEmail: scan.senderEmail || extractSenderEmail(scan.value) || 'unknown@local', 
-              emailContent: scan.value || '', 
-              subject: scan.subject || '' 
-            })
-          : Object.assign({}, commonAnalysis, { url: scan.value });
+          // Extract sender email from email content if not provided
+          const extractSenderEmail = (text) => {
+            if (!text) return '';
+            const emailRegex = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+            const match = String(text).match(emailRegex);
+            return match ? match[0] : '';
+          };
 
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify(body)
-        });
+          const body = (String(scan.type || '').toLowerCase().includes('email'))
+            ? Object.assign({}, commonAnalysis, { 
+                url: scan.senderEmail || extractSenderEmail(scan.value) || 'unknown@local',
+                senderEmail: scan.senderEmail || extractSenderEmail(scan.value) || 'unknown@local', 
+                emailContent: scan.value || '', 
+                subject: scan.subject || '',
+                status: commonAnalysis.isSafe ? 'safe' : 'unsafe',
+                reasons: commonAnalysis.indicators || [],
+                userAction: 'visited',
+                wasWarned: !commonAnalysis.isSafe
+              })
+            : Object.assign({}, commonAnalysis, { 
+                url: scan.value,
+                status: commonAnalysis.isSafe ? 'safe' : 'unsafe',
+                reasons: commonAnalysis.indicators || [],
+                userAction: 'visited',
+                wasWarned: !commonAnalysis.isSafe
+              });
 
-        if (!response.ok) {
-          console.warn('[ScanningSystem] Server returned error when saving scan, falling back to local save');
-          this.saveScanToLocal(scan);
-        } else {
-          const data = await response.json();
-          if (!data.success) {
-            console.warn('[ScanningSystem] API responded with failure:', data.message);
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(body)
+          });
+
+          if (!response.ok) {
+            console.warn('[ScanningSystem] Server returned error when saving scan, falling back to local save');
             this.saveScanToLocal(scan);
           } else {
-            // Reload server history to reflect user's saved scan
-            await this.loadScanHistory();
+            const data = await response.json();
+            if (!data.success) {
+              console.warn('[ScanningSystem] API responded with failure:', data.message);
+              this.saveScanToLocal(scan);
+            } else {
+              // Cache rich scan data (sourceDetails, contributions, etc.) locally
+              // so reports page can display technical details even though the
+              // server DB only stores basic fields.
+              this._cacheRichScanData(scan);
+            }
           }
+        } catch (err) {
+          console.error('[ScanningSystem] Error while saving scan to server, saving locally instead', err);
+          this.saveScanToLocal(scan);
         }
-      } catch (err) {
-        console.error('[ScanningSystem] Error while saving scan to server, saving locally instead', err);
-        this.saveScanToLocal(scan);
+      }
+
+      // Always reload scan history from server after a scan so the dashboard
+      // reflects the latest data (regardless of which save path succeeded)
+      try {
+        await this.loadScanHistory();
+      } catch (e) {
+        console.warn('[ScanningSystem] Failed to reload history after save:', e);
       }
     } else {
       // Non-logged-in user: save to localStorage
@@ -335,7 +440,76 @@ class ScanningSystem {
     return scan;
   }
 
+  /**
+   * Cache rich scan data (sourceDetails, contributions, explanation, errors)
+   * in localStorage so the reports page can display detailed technical info.
+   * Server DB only stores basic fields; this fills the gap.
+   */
+  _cacheRichScanData(scan) {
+    try {
+      const key = (scan.value || scan.url || '').toString().trim().toLowerCase();
+      if (!key) return;
+      const richFields = {};
+      if (scan.sourceDetails && scan.sourceDetails.length > 0) richFields.sourceDetails = scan.sourceDetails;
+      if (scan.contributions && Object.keys(scan.contributions).length > 0) richFields.contributions = scan.contributions;
+      if (scan.explanation) richFields.explanation = scan.explanation;
+      if (scan.errors && scan.errors.length > 0) richFields.errors = scan.errors;
+      if (scan.deescalated !== undefined) richFields.deescalated = scan.deescalated;
+      if (scan.sources && scan.sources.length > 0) richFields.sources = scan.sources;
+      if (scan.rawThreats && scan.rawThreats.length > 0) richFields.rawThreats = scan.rawThreats;
+      if (scan.riskPercent !== undefined) richFields.riskPercent = scan.riskPercent;
+      if (scan.riskScore !== undefined) richFields.riskScore = scan.riskScore;
+      if (scan.confidence !== undefined && scan.confidence !== null) richFields.confidence = scan.confidence;
+      if (Object.keys(richFields).length === 0) return;
+      richFields._cachedAt = Date.now();
+
+      // Load existing cache (max 50 entries)
+      let cache = {};
+      try { cache = JSON.parse(localStorage.getItem('_richScanCache') || '{}'); } catch (e) { cache = {}; }
+      cache[key] = richFields;
+      // Prune old entries (keep most recent 50)
+      const entries = Object.entries(cache);
+      if (entries.length > 50) {
+        entries.sort((a, b) => (b[1]._cachedAt || 0) - (a[1]._cachedAt || 0));
+        cache = Object.fromEntries(entries.slice(0, 50));
+      }
+      localStorage.setItem('_richScanCache', JSON.stringify(cache));
+    } catch (e) {
+      console.warn('[ScanningSystem] Failed to cache rich scan data:', e);
+    }
+  }
+
+  /**
+   * Merge cached rich data into scan items loaded from server
+   */
+  _mergeRichScanCache(scanItems) {
+    try {
+      const cache = JSON.parse(localStorage.getItem('_richScanCache') || '{}');
+      if (Object.keys(cache).length === 0) return;
+      for (const item of scanItems) {
+        const key = (item.value || item.url || '').toString().trim().toLowerCase();
+        const cached = cache[key];
+        if (!cached) continue;
+        // Only merge fields that don't already exist on the item
+        if (cached.sourceDetails && !item.sourceDetails) item.sourceDetails = cached.sourceDetails;
+        if (cached.contributions && !item.contributions) item.contributions = cached.contributions;
+        if (cached.explanation && !item.explanation) item.explanation = cached.explanation;
+        if (cached.errors && !item.errors) item.errors = cached.errors;
+        if (cached.deescalated !== undefined && item.deescalated === undefined) item.deescalated = cached.deescalated;
+        if (cached.sources && !item.sources) item.sources = cached.sources;
+        if (cached.rawThreats && (!item.rawThreats || item.rawThreats.length === 0)) item.rawThreats = cached.rawThreats;
+        if (cached.riskPercent !== undefined && (item.riskPercent === undefined || item.riskPercent === null)) item.riskPercent = cached.riskPercent;
+        if (cached.riskScore !== undefined && (item.riskScore === undefined || item.riskScore === null)) item.riskScore = cached.riskScore;
+        if (cached.confidence !== undefined && cached.confidence !== null && (item.confidence === undefined || item.confidence === null)) item.confidence = cached.confidence;
+      }
+    } catch (e) {
+      console.warn('[ScanningSystem] Failed to merge rich scan cache:', e);
+    }
+  }
+
   saveScanToLocal(scan) {
+    // Cache rich data too
+    this._cacheRichScanData(scan);
     // Add timestamp and string ID
     scan.timestamp = new Date().getTime();
     scan.id = `local-${scan.timestamp}`;
@@ -406,18 +580,22 @@ class ScanningSystem {
     console.log('Current path:', window.location.pathname);
     
     // URL form submission
-    const urlForm = document.querySelector('#panel-url form');
+    const urlForm = document.querySelector('#hp-panel-url form') || document.querySelector('#panel-url form');
     console.log('URL form found:', !!urlForm);
     if (urlForm) {
       urlForm.addEventListener('submit', (e) => this.handleUrlScan(e));
     }
 
     // Email form submission
-    const emailForm = document.querySelector('#panel-email form');
+    const emailForm = document.querySelector('#hp-panel-email form') || document.querySelector('#panel-email form');
     console.log('Email form found:', !!emailForm);
     if (emailForm) {
       emailForm.addEventListener('submit', (e) => this.handleEmailScan(e));
     }
+
+    // Email file upload handling
+    this._uploadedEmailContent = null;
+    this._setupEmailFileUpload();
 
     // Close buttons are now handled in displayResult() for dynamic results
 
@@ -426,12 +604,198 @@ class ScanningSystem {
   }
 
   /**
-   * Call backend Safe Browsing endpoint
+   * Setup email file upload — drag-and-drop + file picker
+   */
+  _setupEmailFileUpload() {
+    const dropZone = document.getElementById('email-file-drop');
+    const fileInput = document.getElementById('email-file-input');
+    const loadedBar = document.getElementById('email-file-loaded');
+    const fileName = document.getElementById('email-file-name');
+    const fileSize = document.getElementById('email-file-size');
+    const removeBtn = document.getElementById('email-file-remove');
+    if (!dropZone || !fileInput) return;
+
+    const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+
+    // Click to browse
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    // Drag events
+    ['dragenter', 'dragover'].forEach(evt => {
+      dropZone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('dragover'); });
+    });
+    ['dragleave', 'drop'].forEach(evt => {
+      dropZone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('dragover'); });
+    });
+
+    // Handle drop
+    dropZone.addEventListener('drop', (e) => {
+      const file = e.dataTransfer?.files?.[0];
+      if (file) this._processEmailFile(file, MAX_SIZE);
+    });
+
+    // Handle file picker
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      if (file) this._processEmailFile(file, MAX_SIZE);
+      fileInput.value = ''; // reset so same file can be re-selected
+    });
+
+    // Remove file
+    if (removeBtn) {
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._clearUploadedFile();
+      });
+    }
+  }
+
+  /**
+   * Process an uploaded email file
+   */
+  _processEmailFile(file, maxSize) {
+    const loadedBar = document.getElementById('email-file-loaded');
+    const fileNameEl = document.getElementById('email-file-name');
+    const fileSizeEl = document.getElementById('email-file-size');
+    const dropZone = document.getElementById('email-file-drop');
+    const textarea = document.getElementById('email-input');
+
+    if (file.size > maxSize) {
+      this.showNotification('File too large — max 5 MB', 'error');
+      return;
+    }
+
+    const allowed = ['.eml', '.msg', '.txt', '.mhtml', '.mht'];
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!allowed.includes(ext)) {
+      this.showNotification('Unsupported file type. Use .eml, .msg, .txt, or .mhtml', 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result;
+      if (typeof content !== 'string' || !content.trim()) {
+        this.showNotification('Could not read file content', 'error');
+        return;
+      }
+      this._uploadedEmailContent = content;
+
+      // Show loaded indicator
+      if (fileNameEl) fileNameEl.textContent = file.name;
+      if (fileSizeEl) fileSizeEl.textContent = this._formatFileSize(file.size);
+      if (loadedBar) loadedBar.classList.add('visible');
+      if (dropZone) dropZone.style.display = 'none';
+
+      // Also populate the textarea so user can see/edit
+      if (textarea) textarea.value = content;
+
+      this.showNotification(`Loaded "${file.name}" — ready to scan`, 'success');
+    };
+    reader.onerror = () => {
+      this.showNotification('Failed to read file', 'error');
+    };
+    reader.readAsText(file);
+  }
+
+  /**
+   * Clear uploaded email file
+   */
+  _clearUploadedFile() {
+    this._uploadedEmailContent = null;
+    const loadedBar = document.getElementById('email-file-loaded');
+    const dropZone = document.getElementById('email-file-drop');
+    if (loadedBar) loadedBar.classList.remove('visible');
+    if (dropZone) dropZone.style.display = '';
+  }
+
+  /**
+   * Format file size in human-readable form
+   */
+  _formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  /**
+   * Call the full 9-source threat intelligence scanner (extension backend)
+   * Falls back to ML backend (port 3000) if 9-source scanner is unavailable
    */
   async scanUrlViaBackend(url) {
-    console.log('[scanUrlViaBackend] Sending scan request', { url, urlType: typeof url, urlLength: url?.length });
+    console.log('[scanUrlViaBackend] Sending scan request to 9-source scanner', { url });
+
+    // ── On-Device Pre-Filter: instant block for obvious phishing ──
+    if (window.PhishNetPreFilter?.preFilterUrl) {
+      try {
+        const pf = window.PhishNetPreFilter.preFilterUrl(url);
+        if (pf.action === 'BLOCK') {
+          console.log('[scanUrlViaBackend] ⚡ PRE-FILTER BLOCK:', pf.reason);
+          return {
+            success: true,
+            preFiltered: true,
+            savedToDb: false,
+            status: pf.status || 'MALICIOUS',
+            score: pf.score,
+            risk_score: pf.score / 100,
+            infra_risk: 0,
+            lexical_risk: pf.score / 100,
+            combined_risk: pf.score / 100,
+            confidence: pf.score,
+            threats: pf.flags.map(f => ({ source: 'Pre-Filter', type: f.type, detail: f.detail })),
+            sources: ['On-Device Pre-Filter'],
+            sourceDetails: [{ source: 'On-Device Pre-Filter', safe: false, details: { flags: pf.flags } }],
+            contributions: { prefilter: pf.score / 100 },
+            deescalated: false,
+            earlyExit: pf.reason,
+            temporal_risk: 0,
+            temporal_trust: 0,
+            domain_age_days: null,
+            explanation: pf.explanation,
+            errors: [],
+            meta: { url, timestamp: new Date().toISOString() }
+          };
+        }
+        if (pf.flags?.length > 0) {
+          console.log('[scanUrlViaBackend] Pre-filter hints:', pf.flags.map(f => f.type).join(', '));
+        }
+      } catch (pfErr) {
+        console.warn('[scanUrlViaBackend] Pre-filter error (continuing to backend):', pfErr.message);
+      }
+    }
+
     const token = localStorage.getItem('token');
-    const response = await fetch(getApiUrl(window.API_CONFIG.api.endpoints.scan.url), {
+
+    // Primary: use the full multi-source scanner on port 5000
+    const fullScanEndpoint = '/api/v1/urls/scan';
+    const fullScanUrl = getApiUrl(fullScanEndpoint);
+
+    try {
+      const response = await fetch(fullScanUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ url })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      console.log('[scanUrlViaBackend] Response received', { status: response.status, ok: response.ok, data });
+      if (response.ok && data.success !== false) {
+        return data;
+      }
+      console.warn('[scanUrlViaBackend] 9-source scanner returned error, falling back to ML backend');
+    } catch (err) {
+      console.warn('[scanUrlViaBackend] 9-source scanner unavailable, falling back to ML backend:', err.message);
+    }
+
+    // Fallback: use the ML backend scanner on port 3000
+    const mlScanEndpoint = window.API_CONFIG?.api?.endpoints?.scan?.url || '/api/scan/scan-url';
+    const mlScanUrl = `${window.API_CONFIG?.api?.mlBaseURL || 'http://localhost:3000'}${mlScanEndpoint}`;
+    console.log('[scanUrlViaBackend] Calling ML backend fallback:', mlScanUrl);
+
+    const mlResponse = await fetch(mlScanUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -440,22 +804,82 @@ class ScanningSystem {
       body: JSON.stringify({ url })
     });
 
-    const data = await response.json().catch(() => ({}));
-    console.log('[scanUrlViaBackend] Response received', { status: response.status, ok: response.ok, data });
-    if (!response.ok || data.success === false) {
-      console.error('[scanUrlViaBackend] Error details:', data);
-      throw new Error(data?.message || 'Failed to scan URL');
+    const mlData = await mlResponse.json().catch(() => ({}));
+    console.log('[scanUrlViaBackend] ML backend response', { status: mlResponse.status, ok: mlResponse.ok, mlData });
+    if (!mlResponse.ok || mlData.success === false) {
+      console.error('[scanUrlViaBackend] ML backend also failed:', mlData);
+      throw new Error(mlData?.message || 'Failed to scan URL — both backends unavailable');
     }
 
-    return data;
+    return mlData;
   }
 
   /**
-   * Normalize Safe Browsing response to UI-friendly format
+   * Normalize scan response to UI-friendly format.
+   * Supports:
+   *   A) 9-source threat intel response (extension backend /api/v1/urls/scan)
+   *   B) Advanced URL Scanner response (isPhishing, riskLevel, riskScore)
+   *   C) Legacy Safe Browsing API response (threats array)
    */
   normalizeSafeBrowsingResult(url, apiResult, elapsedMs) {
-    // Handle new Advanced URL Scanner response format
     const data = apiResult?.data || apiResult;
+
+    // ── Format A: 9-Source Threat Intel ──
+    if (data?.sources && data?.sourceDetails && data?.contributions) {
+      const statusRaw = (data.status || 'SAFE').toUpperCase();
+      const status = statusRaw === 'MALICIOUS' ? 'malicious' : statusRaw === 'SUSPICIOUS' ? 'suspicious' : 'safe';
+      const score = data.score ?? Math.round((data.risk_score || 0) * 100);
+      const riskScore = data.risk_score ?? (score / 100);
+      const riskLevel = status === 'malicious' ? 'High' : status === 'suspicious' ? 'Medium' : 'Low';
+
+      // Build issues from threats
+      const threats = Array.isArray(data.threats) ? data.threats : [];
+      let issues;
+      if (status === 'safe') {
+        issues = ['✓ No security threats detected', '✓ URL appears legitimate'];
+      } else {
+        issues = threats.length > 0
+          ? threats.map(t => {
+              const label = this.formatThreatTypeLabel(t.type || t.threatType || 'THREAT');
+              const detail = t.detail || t.details || '';
+              return `⚠ ${label}${detail ? ': ' + detail : ''}`;
+            })
+          : ['⚠ Potential security concern detected'];
+      }
+
+      // Build summary from explanation
+      let summary = data.explanation || '';
+      if (!summary) {
+        if (status === 'safe') summary = 'All threat intelligence sources report this URL as clean.';
+        else if (status === 'malicious') summary = `This URL has been flagged as malicious with a risk score of ${score}/100.`;
+        else summary = `This URL shows suspicious indicators with a risk score of ${score}/100.`;
+      }
+
+      return {
+        status,
+        threat: status,
+        threatType: status === 'malicious' ? 'phishing' : status,
+        riskLevel,
+        riskPercent: score,
+        riskScore,
+        issues,
+        indicators: threats.map(t => t.type || t.threatType || 'THREAT'),
+        summary,
+        confidence: data.confidence || score,
+        scanTime: ((elapsedMs || 0) / 1000).toFixed(2),
+        domain: this.extractDomainSafe(url),
+        rawThreats: threats,
+        isSafe: status === 'safe',
+        // Pass through ALL rich data from 9-source scanner
+        sources: data.sources || [],
+        sourceDetails: data.sourceDetails || [],
+        contributions: data.contributions || {},
+        explanation: data.explanation || '',
+        deescalated: data.deescalated || false,
+        errors: data.errors || [],
+        meta: data.meta || {},
+      };
+    }
     
     // Check for new format (isPhishing, riskLevel, riskScore)
     if (data?.isPhishing !== undefined || data?.riskLevel !== undefined) {
@@ -592,6 +1016,39 @@ class ScanningSystem {
   }
 
   /**
+   * Format threat type codes to human-readable labels
+   */
+  formatThreatTypeLabel(type) {
+    const labels = {
+      'SSL_ANOMALY': 'SSL Certificate Invalid',
+      'SELF_SIGNED_CERT': 'Self-Signed Certificate',
+      'SSL_EXPIRING': 'SSL Certificate Expiring Soon',
+      'CERT_MISMATCH': 'Certificate/Hostname Mismatch',
+      'UNTRUSTED_CERT': 'Untrusted Certificate Chain',
+      'CERT_NEWLY_ISSUED': 'Newly Issued Certificate',
+      'CERT_SHORT_VALIDITY': 'Short Certificate Validity',
+      'FREE_CA_NEW_CERT': 'Free CA + New Certificate',
+      'WILDCARD_FREE_CA': 'Wildcard from Free CA',
+      'WEAK_TLS': 'Weak TLS Version',
+      'NO_HTTPS': 'No HTTPS Encryption',
+      'CT_NEW_DOMAIN': 'New Domain (CT Logs)',
+      'CT_THIN_HISTORY': 'Thin Certificate History',
+      'TYPOSQUATTING': 'Domain Impersonation',
+      'SUSPICIOUS_STRUCTURE': 'Suspicious URL Structure',
+      'PHISHING_URL_PATTERN': 'Phishing URL Pattern',
+      'DOMAIN_VERY_NEW': 'Domain Registered < 7 Days',
+      'DOMAIN_NEW': 'Domain Registered < 30 Days',
+      'DOMAIN_RECENT': 'Domain Registered < 90 Days',
+      'REDIRECT_LOOP': 'Redirect Loop',
+      'EXCESSIVE_REDIRECTS': 'Excessive Redirects',
+      'CROSS_DOMAIN_REDIRECTS': 'Cross-Domain Redirects',
+      'PROTOCOL_DOWNGRADE': 'HTTPS→HTTP Downgrade',
+    };
+    if (labels[type]) return labels[type];
+    return (type || 'Unknown').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  /**
    * Handle URL scan
    */
   async handleUrlScan(e) {
@@ -620,9 +1077,28 @@ class ScanningSystem {
 
     console.log('[handleUrlScan] Scanning URL:', url);
 
-    // Show loading state
+    // Show loading state in results section
     const resultsSection = document.getElementById('results-section');
+    const container = document.getElementById('scan-result-container');
     if (resultsSection) resultsSection.style.display = 'block';
+    if (container) {
+      container.innerHTML = `
+        <div class="results-card scan-loading-card">
+          <div class="scan-loading">
+            <div class="scan-loading-spinner"></div>
+            <div class="scan-loading-text">
+              <h3>Scanning URL...</h3>
+              <p>Checking 9 security sources — this may take a few seconds</p>
+            </div>
+            <div class="scan-loading-sources">
+              <span>Google Safe Browsing</span><span>VirusTotal</span><span>URLhaus</span>
+              <span>AbuseIPDB</span><span>Shodan</span><span>ML Model</span>
+              <span>URL Heuristics</span><span>Domain Age</span><span>Redirect Analysis</span>
+            </div>
+          </div>
+        </div>`;
+      resultsSection.scrollIntoView({ behavior: 'smooth' });
+    }
 
     try {
       const startTime = performance.now();
@@ -631,9 +1107,14 @@ class ScanningSystem {
 
       console.log('[handleUrlScan] Normalized result', normalized);
 
+      // If the scan route already persisted the record, pass the flag so
+      // saveScan() skips the redundant POST to /check (avoids duplicates).
+      const alreadySaved = !!(apiResult?.savedToDb || (apiResult?.data && apiResult.data.savedToDb));
+
       await this.saveScan({
         type: 'url',
         value: url,
+        _savedToDb: alreadySaved,
         ...normalized
       });
 
@@ -646,6 +1127,9 @@ class ScanningSystem {
     } catch (error) {
       console.error('[handleUrlScan] Failed:', error);
       this.showNotification(error?.message || 'Failed to scan URL', 'error');
+      // Hide loading state on error
+      if (resultsSection) resultsSection.style.display = 'none';
+      if (container) container.innerHTML = '';
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
@@ -671,8 +1155,10 @@ class ScanningSystem {
     console.log('[handleEmailScan] Scan started');
 
     const email = document.getElementById('email-input').value.trim();
-    if (!email) {
-      this.showNotification('Please enter email content', 'error');
+    // Use uploaded file content if available and textarea is empty
+    const emailContent = email || this._uploadedEmailContent || '';
+    if (!emailContent) {
+      this.showNotification('Please paste email content or upload a file', 'error');
       if (submitBtn) {
         submitBtn.disabled = false;
         submitBtn.textContent = originalLabel || 'Scan Email';
@@ -683,32 +1169,55 @@ class ScanningSystem {
 
     console.log('[handleEmailScan] Scanning email content');
 
-    // Show loading state
+    // Show loading state with spinner
     const resultsSection = document.getElementById('results-section');
+    const container = document.getElementById('scan-result-container');
     if (resultsSection) resultsSection.style.display = 'block';
+    if (container) {
+      container.innerHTML = `
+        <div class="results-card scan-loading-card">
+          <div class="scan-loading">
+            <div class="scan-loading-spinner"></div>
+            <div class="scan-loading-text">
+              <h3>Analyzing Email...</h3>
+              <p>Running PhishingDistilBERT AI model analysis</p>
+            </div>
+            <div class="scan-loading-sources">
+              <span>ML Classification</span><span>Header Analysis</span><span>Sender Auth</span>
+              <span>Domain Verification</span><span>Content Heuristics</span><span>Pattern Matching</span>
+            </div>
+          </div>
+        </div>`;
+      resultsSection.scrollIntoView({ behavior: 'smooth' });
+    }
 
     const startTime = performance.now();
     let scanResult;
     
     try {
       // Try calling the real backend API
-      scanResult = await this.scanEmailViaBackend(email);
+      scanResult = await this.scanEmailViaBackend(emailContent);
       console.log('[handleEmailScan] Backend scan result:', scanResult);
     } catch (error) {
       console.warn('[handleEmailScan] Backend unavailable, using fallback:', error.message);
-      // Fallback to mock scan if backend is unavailable
-      scanResult = this.generateEmailScanResult(email);
+      // Fallback to heuristic scan if backend is unavailable
+      scanResult = this.generateEmailScanResult(emailContent);
     }
     
     const endTime = performance.now();
     scanResult.scanTime = ((endTime - startTime) / 1000).toFixed(2);
 
-    // Save to history (refreshes from server for logged-in users)
-    await this.saveScan({
-      type: 'email',
-      value: email,
-      ...scanResult
-    });
+    try {
+      // Save to history (refreshes from server for logged-in users)
+      await this.saveScan({
+        type: 'email',
+        value: emailContent,
+        senderEmail: scanResult.senderEmail || null,
+        ...scanResult
+      });
+    } catch (saveErr) {
+      console.warn('[handleEmailScan] Failed to save scan:', saveErr.message);
+    }
     
     // Display result
     console.log('[handleEmailScan] Displaying result:', scanResult);
@@ -727,12 +1236,20 @@ class ScanningSystem {
    * Call backend email scan endpoint (PhishingDistilBERT model)
    */
   async scanEmailViaBackend(emailContent) {
-    const API_BASE = window.CONFIG?.API_BASE_URL || 'http://localhost:3000';
+    const API_BASE = window.API_CONFIG?.api?.mlBaseURL || window.CONFIG?.API_BASE_URL || 'http://localhost:3000';
+
+    // Try to parse subject from pasted email content (raw headers)
+    let parsedSubject = '';
+    const subjectMatch = emailContent.match(/^Subject:\s*(.+)$/im);
+    if (subjectMatch) parsedSubject = subjectMatch[1].trim();
     
     const response = await fetch(`${API_BASE}/api/scan/email`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ emailContent })
+      body: JSON.stringify({ 
+        subject: parsedSubject,
+        emailContent 
+      })
     });
     
     if (!response.ok) {
@@ -746,27 +1263,96 @@ class ScanningSystem {
     const data = responseData.data || responseData;
     
     // Convert backend response to UI format
+    // IMPORTANT: data.confidence is a string like "84.00%" — parse it correctly
     const isPhishing = data.classification === 'phishing';
-    const confidence = (data.confidence || 0.5) * 100;
-    const status = isPhishing ? (confidence > 80 ? 'malicious' : 'suspicious') : 'safe';
-    
+    const confidenceScore = data.confidenceScore || 0; // This is the raw float (0-1)
+    const confidencePercent = isPhishing 
+      ? Math.round(confidenceScore * 100) 
+      : Math.round((1 - confidenceScore) * 100);
+    const status = isPhishing ? (confidencePercent > 80 ? 'malicious' : 'suspicious') : 'safe';
+
+    // Map riskFactors to user-friendly labels
+    const riskFactorLabels = {
+      'urgency_keywords': '⚠ Urgency Language Detected',
+      'credential_keywords': '⚠ Credential/Password Keywords',
+      'financial_keywords': '⚠ Financial Keywords Found',
+      'urls_found_1': '⚠ Suspicious Link Found',
+      'urls_found_2': '⚠ Multiple Links Found',
+      'urls_found_3': '⚠ Multiple Links Found',
+      'suspicious_url_naming': '⚠ Suspicious URL Naming Pattern',
+      'impersonal_greeting': '⚠ Generic/Impersonal Greeting',
+      'pressure_tactics': '⚠ Pressure Tactics Detected',
+      'reply_to_domain_mismatch': '⚠ Reply-To Domain Mismatch',
+      'lookalike_domain_detected': '⚠ Look-alike Domain Detected',
+      'sender_domain_mismatch': '⚠ Sender Domain Does Not Match Brand',
+      'domain_contains_numbers': '⚠ Suspicious Domain Pattern',
+      'spf_failed': '✕ SPF Authentication Failed',
+      'dkim_failed': '✕ DKIM Authentication Failed',
+      'dmarc_failed': '✕ DMARC Authentication Failed',
+      'spf_passed': '✓ SPF Authentication Passed',
+      'dkim_passed': '✓ DKIM Authentication Passed',
+      'dmarc_passed': '✓ DMARC Authentication Passed',
+      'fully_authenticated': '✓ Fully Authenticated (SPF+DKIM+DMARC)',
+      'trusted_sender_domain': '✓ Trusted Sender Domain',
+      'institutional_domain': '✓ Institutional Domain (.edu/.gov)',
+      'dns_inconclusive_capped': 'ℹ DNS Results Inconclusive',
+      'legitimate_healthcare_email': '✓ Legitimate Healthcare Communication'
+    };
+
+    const rawFactors = data.riskFactors || [];
+    const friendlyIndicators = rawFactors.map(f => {
+      // Handle dynamic factors like "sender_domain_mismatch_paypal" or "verified_netflix_domain"
+      if (f.startsWith('sender_domain_mismatch_')) return `⚠ Sender Domain Does Not Match ${f.replace('sender_domain_mismatch_', '').charAt(0).toUpperCase() + f.replace('sender_domain_mismatch_', '').slice(1)}`;
+      if (f.startsWith('verified_') && f.endsWith('_domain')) return `✓ Verified ${f.replace('verified_', '').replace('_domain', '').charAt(0).toUpperCase() + f.replace('verified_', '').replace('_domain', '').slice(1)} Domain`;
+      // Links found — informational for safe emails, warning for phishing
+      if (f.startsWith('urls_found_')) {
+        const count = f.replace('urls_found_', '');
+        return isPhishing ? `⚠ ${count} Link(s) Found` : `ℹ ${count} Link(s) Found`;
+      }
+      return riskFactorLabels[f] || `⚠ ${f.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}`;
+    });
+
+    // Build issues list from risk factors
+    const issues = isPhishing 
+      ? [`Phishing detected with ${confidencePercent}% confidence`, ...friendlyIndicators.filter(i => i.startsWith('⚠') || i.startsWith('✕'))]
+      : friendlyIndicators.length > 0 
+        ? friendlyIndicators
+        : ['✓ No phishing indicators detected', '✓ Email appears safe'];
+
+    // Build indicators (include positive markers too)
+    const indicators = friendlyIndicators.length > 0 
+      ? friendlyIndicators 
+      : (isPhishing 
+        ? ['⚠ Phishing patterns detected', '⚠ Suspicious content'] 
+        : ['✓ No phishing patterns', '✓ Safe content']);
+
+    // Extract sender email from content
+    const senderMatch = emailContent.match(/^From:\s*.*?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/im);
+    const senderEmail = senderMatch ? senderMatch[1] : null;
+
+    // Build summary
+    const summary = isPhishing
+      ? `WARNING: This email has been identified as a potential phishing attempt with ${confidencePercent}% confidence. ${friendlyIndicators.filter(i => i.startsWith('⚠')).join('. ')}. Exercise extreme caution — do not click links or download attachments.`
+      : `This email appears to be legitimate. Our PhishingDistilBERT model analysis found no phishing indicators (${confidencePercent}% confidence). The content does not match known phishing patterns.`;
+
     return {
       status,
       threat: status,
       riskLevel: status === 'safe' ? 'Low' : status === 'suspicious' ? 'Medium' : 'High',
-      riskPercent: isPhishing ? Math.round(confidence) : Math.round(100 - confidence),
-      issues: isPhishing 
-        ? [`Phishing detected with ${confidence.toFixed(1)}% confidence`, ...(data.indicators || [])]
-        : ['No phishing indicators detected', 'Email appears safe'],
-      indicators: data.indicators || (isPhishing 
-        ? ['⚠ Phishing patterns detected', '⚠ Suspicious content'] 
-        : ['✓ No phishing patterns', '✓ Safe content']),
-      summary: isPhishing
-        ? `WARNING: This email has been identified as a potential phishing attempt with ${confidence.toFixed(1)}% confidence. ${(data.indicators || []).join('. ')}. Exercise extreme caution - do not click links or download attachments.`
-        : `This email appears to be legitimate. Our PhishingDistilBERT model analysis found no phishing indicators (${(100 - confidence).toFixed(1)}% safe confidence). The content does not match known phishing patterns.`,
-      confidence: confidence,
+      riskPercent: Math.round(confidenceScore * 100), // confidenceScore = phishing probability (0-1), so riskPercent is always phishing risk
+      issues,
+      indicators,
+      summary,
+      confidence: confidencePercent,
       isSafe: !isPhishing,
-      model: data.model || 'PhishingDistilBERT'
+      isVerifiedLegitimate: data.isVerifiedLegitimate || false,
+      senderEmail,
+      subject: parsedSubject || data.subject || '',
+      detectionMethod: data.detectionMethod || 'hybrid-ml-heuristic',
+      model: data.model || 'PhishingDistilBERT',
+      heuristicScore: data.heuristicScore,
+      mlResult: data.mlResult || null,
+      riskFactors: rawFactors
     };
   }
 
@@ -987,6 +1573,14 @@ class ScanningSystem {
         : 'This email appears legitimate. No significant phishing indicators were detected.';
     }
 
+    // Extract sender email from headers
+    const senderMatch = emailContent.match(/from:\s*(?:.*?<([^>]+)>|([^\s\n]+@[^\s\n]+))/i);
+    const senderEmail = senderMatch ? (senderMatch[1] || senderMatch[2] || '') : '';
+
+    // Extract subject from headers
+    const subjectMatch = emailContent.match(/subject:\s*(.+?)(?:\r?\n(?!\s)|$)/i);
+    const subject = subjectMatch ? subjectMatch[1].trim() : '';
+
     return {
       status,
       riskLevel,
@@ -996,75 +1590,520 @@ class ScanningSystem {
       summary,
       confidence: Math.round((status === 'safe' ? (1 - phishingScore) : phishingScore) * 100),
       isSafe: status === 'safe',
-      isVerifiedLegitimate
+      isVerifiedLegitimate,
+      senderEmail,
+      subject,
+      detectionMethod: 'heuristic-only (offline)',
+      heuristicScore: phishingScore,
+      mlResult: { confidence: phishingScore, label: status === 'safe' ? 'legitimate' : 'phishing', inferenceTime: 0 }
     };
   }
 
   /**
    * Create fresh result HTML with correct status class
-   * This creates a brand new DOM element, never reuses old ones
+   * HIBP-inspired design: hero card + expandable detail sections
    */
   createResultHTML(result, resultType) {
     const threat = result.status || 'safe';
     const statusClass = `status-${threat}`;
-    
-    const labels = { safe: 'Safe', suspicious: 'Suspicious', malicious: 'Malicious' };
-    const riskColors = {
-      Low: 'low',
-      Medium: 'medium',
-      High: 'high',
-      Critical: 'critical'
+    const score = result.riskPercent || 0;
+    const isEmail = resultType === 'email';
+
+    const verdictConfig = {
+      safe: {
+        title: isEmail ? 'Email Looks Safe' : 'No Threats Detected',
+        description: isEmail
+          ? 'This email has been analyzed by our PhishingDistilBERT AI model and heuristic engine. No phishing indicators were detected — it appears to be legitimate.'
+          : 'This website has been scanned across multiple security databases and found no threats. You can visit it safely.',
+        color: 'var(--color-safe)',
+        rawColor: '#00FF88',
+        heroGrad: 'linear-gradient(180deg, rgba(0,255,136,0.12) 0%, rgba(0,255,136,0.02) 60%, transparent 100%)'
+      },
+      suspicious: {
+        title: isEmail ? 'Suspicious Email' : 'Suspicious Activity',
+        description: isEmail
+          ? 'This email shows warning signs of phishing. Avoid clicking links, downloading attachments, or sharing personal information. Review the details below.'
+          : 'This website shows some warning signs. Avoid entering passwords or personal information. Review the details below to see what was detected.',
+        color: 'var(--color-suspicious)',
+        rawColor: '#FFC107',
+        heroGrad: 'linear-gradient(180deg, rgba(255,193,7,0.12) 0%, rgba(255,193,7,0.02) 60%, transparent 100%)'
+      },
+      malicious: {
+        title: isEmail ? 'Phishing Email Detected' : 'Malicious URL',
+        description: isEmail
+          ? 'This email has been identified as a phishing attempt! Do not click any links, download attachments, or reply with personal information. Delete it immediately.'
+          : 'Oh no — this URL is dangerous! This website has been flagged as malicious by our security sources. Review the details below to see what was detected.',
+        color: 'var(--color-malicious)',
+        rawColor: '#FF4D4D',
+        heroGrad: 'linear-gradient(180deg, rgba(255,77,77,0.12) 0%, rgba(255,77,77,0.02) 60%, transparent 100%)'
+      }
     };
 
-    const statusLabel = labels[threat] || 'Unknown';
-    const riskClass = riskColors[result.riskLevel] || 'low';
+    const v = verdictConfig[threat] || verdictConfig.safe;
 
-    return `
-      <div class="results-card ${statusClass}">
+    // — Source stats —
+    const sd = result.sourceDetails || [];
+    const cleanCount = sd.filter(s => s.safe === true).length;
+    const flaggedCount = sd.filter(s => s.safe === false).length;
+    const errorCount = (result.errors || []).length;
+    const totalSources = sd.length;
+
+    // ── HERO CARD (HIBP style — centered, big score, title, description) ──
+    const heroDisplayText = isEmail
+      ? (result.senderEmail || result.subject || 'Email Content')
+      : (result.domain || result.url || '');
+    const heroCard = `
+      <div class="hibp-hero ${statusClass}" style="background: ${v.heroGrad};">
         <button class="close-results-btn" title="Close results">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
-        
-        <div class="results-header">
-          <div class="status-indicator ${statusClass}">
-            <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-              <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>
-          </div>
-          <div class="results-header-text">
-            <h3 class="status-label">${statusLabel}</h3>
-            <p class="status-subtext">${this.getStatusDescription(threat, resultType)}</p>
+        <div class="hibp-hero-score" style="color:${v.rawColor}">${score}</div>
+        <h2 class="hibp-hero-title" style="color:${v.rawColor}">${v.title}</h2>
+        <p class="hibp-hero-desc">${v.description}</p>
+        <div class="hibp-hero-url">${this.escapeHtml(heroDisplayText)}</div>
+      </div>`;
+
+    // ── SCAN OVERVIEW BAR (like "Stay Protected" bar) ──
+    const hasDetailedData = sd.length > 0 || isEmail;
+    const overviewSub = isEmail
+      ? `Analyzed in ${result.scanTime || '?'}s using PhishingDistilBERT AI + Heuristic Engine`
+      : `Scanned in ${result.scanTime || '?'}s using ${totalSources} security sources`;
+    const overviewBar = `
+      <div class="hibp-overview-bar">
+        <div class="hibp-overview-left">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <div>
+            <strong>Scan Complete</strong>
+            <span class="hibp-overview-sub">${overviewSub}</span>
           </div>
         </div>
+        ${hasDetailedData ? `<button class="view-full-report-btn" type="button"><span class="tech-btn-label">View Details</span></button>` : ''}
+      </div>`;
 
-        <div class="results-body">
-          <div class="risk-meter">
-            <div class="risk-label">
-              <span>Risk Level:</span>
-              <span class="risk-value ${riskClass}">${result.riskLevel || 'Unknown'}</span>
+    // ── DETAILED SECTIONS (shown/hidden on toggle, HIBP style) ──
+    let detailSections = '';
+    if (hasDetailedData) {
+
+      if (isEmail) {
+        // ──────────── EMAIL-SPECIFIC DETAIL SECTIONS ────────────
+        const emailIndicators = result.indicators || [];
+        const emailIssues = result.issues || [];
+        const mlResult = result.mlResult || {};
+        const heuristicScore = result.heuristicScore || 0;
+        const detectionMethod = result.detectionMethod || 'Unknown';
+
+        // 1. "What Was Found" + "Analysis Overview" side-by-side
+        let emailFindingsHTML = '';
+        if (threat === 'safe') {
+          emailFindingsHTML = `
+            <p style="color:var(--text-muted);line-height:1.7;margin:0">
+              Our PhishingDistilBERT AI model and heuristic analysis engine found no phishing indicators in this email.
+              The content appears legitimate with no suspicious patterns, urgency tactics, or credential harvesting attempts detected.
+            </p>`;
+        } else {
+          if (emailIssues.length > 0) {
+            emailFindingsHTML = emailIssues.map(issue => `
+              <p style="color:var(--text-muted);line-height:1.7;margin:0 0 0.75rem">
+                <span style="color:${v.rawColor}">⚠</span> ${this.escapeHtml(issue)}
+              </p>`).join('');
+          } else {
+            emailFindingsHTML = `
+              <p style="color:var(--text-muted);line-height:1.7;margin:0">
+                ${threat === 'malicious'
+                  ? 'Multiple indicators suggest this is a phishing email designed to steal your credentials or personal information.'
+                  : 'Some characteristics of this email raised concerns. Exercise caution before interacting with it.'}
+              </p>`;
+          }
+        }
+
+        const emailOverview = `
+          <div class="hibp-detail-card hibp-overview-sidebar">
+            <h3 class="hibp-detail-title">Analysis Overview</h3>
+            <div class="hibp-overview-item">
+              <span class="hibp-dot" style="background:var(--accent-cyan)"></span>
+              <span class="hibp-overview-label">Risk Score:</span>
+              <strong style="color:${v.rawColor}">${score} / 100</strong>
             </div>
+            <div class="hibp-overview-item">
+              <span class="hibp-dot" style="background:var(--accent-cyan)"></span>
+              <span class="hibp-overview-label">Detection:</span>
+              <strong style="font-size:0.82rem">${this.escapeHtml(detectionMethod)}</strong>
+            </div>
+            ${mlResult.confidence !== undefined ? `<div class="hibp-overview-item">
+              <span class="hibp-dot" style="background:var(--primary-blue)"></span>
+              <span class="hibp-overview-label">ML Confidence:</span>
+              <strong style="color:var(--primary-blue)">${(mlResult.confidence * 100).toFixed(1)}%</strong>
+            </div>` : ''}
+            ${mlResult.inferenceTime ? `<div class="hibp-overview-item">
+              <span class="hibp-dot" style="background:var(--primary-blue)"></span>
+              <span class="hibp-overview-label">Inference Time:</span>
+              <strong>${mlResult.inferenceTime}ms</strong>
+            </div>` : ''}
+            <div class="hibp-overview-item">
+              <span class="hibp-dot" style="background:${heuristicScore > 0.3 ? 'var(--color-malicious)' : 'var(--color-safe)'}"></span>
+              <span class="hibp-overview-label">Heuristic Score:</span>
+              <strong>${(heuristicScore * 100).toFixed(0)}%</strong>
+            </div>
+            ${result.isVerifiedLegitimate ? `<div class="hibp-overview-item">
+              <span class="hibp-dot" style="background:var(--color-safe)"></span>
+              <span class="hibp-overview-label">Verified Sender:</span>
+              <strong style="color:var(--color-safe)">Yes</strong>
+            </div>` : ''}
+          </div>`;
+
+        // 2. Detection Sources (ML + Heuristic)
+        const emailSourceItems = [];
+        // ML Model source — check if the hybrid system overrode the ML prediction
+        const mlSaysPhishing = mlResult.label === 'phishing';
+        const mlOverridden = (mlSaysPhishing && threat === 'safe') || (!mlSaysPhishing && threat === 'malicious');
+        
+        if (mlOverridden) {
+          // ML was overridden by hybrid scoring — show it clearly
+          const mlConfPct = mlResult.confidence !== undefined ? (mlResult.confidence * 100).toFixed(1) + '%' : '';
+          emailSourceItems.push(`<div class="hibp-source-item">
+            <span class="hibp-dot" style="background:var(--primary-blue)"></span>
+            <span class="hibp-source-name">PhishingDistilBERT (ML)</span>
+            <span class="hibp-source-status" style="color:var(--text-muted)">Overridden</span>
+            <span class="hibp-source-detail">Predicted ${mlSaysPhishing ? 'phishing' : 'safe'} (${mlConfPct}) — overridden by ${result.isVerifiedLegitimate ? 'verified sender auth' : 'heuristic analysis'}</span>
+          </div>`);
+        } else {
+          // ML agrees with the overall verdict — display normally
+          const mlColor = mlSaysPhishing ? 'var(--color-malicious)' : 'var(--color-safe)';
+          emailSourceItems.push(`<div class="hibp-source-item">
+            <span class="hibp-dot" style="background:${mlColor}"></span>
+            <span class="hibp-source-name">PhishingDistilBERT (ML)</span>
+            <span class="hibp-source-status" style="color:${mlColor}">${mlSaysPhishing ? 'Phishing' : 'Safe'}</span>
+            <span class="hibp-source-detail">${mlResult.confidence !== undefined ? (mlResult.confidence * 100).toFixed(1) + '% confidence' : ''}</span>
+          </div>`);
+        }
+        
+        // Heuristic engine source
+        const heuristicSafe = heuristicScore < 0.3;
+        emailSourceItems.push(`<div class="hibp-source-item">
+          <span class="hibp-dot" style="background:${heuristicSafe ? 'var(--color-safe)' : 'var(--color-malicious)'}"></span>
+          <span class="hibp-source-name">Heuristic Engine</span>
+          <span class="hibp-source-status" style="color:${heuristicSafe ? 'var(--color-safe)' : 'var(--color-malicious)'}">${heuristicSafe ? 'Clean' : 'Flagged'}</span>
+          <span class="hibp-source-detail">Score: ${(heuristicScore * 100).toFixed(0)}%</span>
+        </div>`);
+        
+        // Sender Auth source (when verified)
+        if (result.isVerifiedLegitimate) {
+          emailSourceItems.push(`<div class="hibp-source-item">
+            <span class="hibp-dot" style="background:var(--color-safe)"></span>
+            <span class="hibp-source-name">Sender Authentication</span>
+            <span class="hibp-source-status" style="color:var(--color-safe)">Verified</span>
+            <span class="hibp-source-detail">Trusted domain with full authentication</span>
+          </div>`);
+        };
+
+        // 3. Indicators Found (risk factors)
+        let indicatorsSection = '';
+        if (emailIndicators.length > 0 || emailIssues.length > 0) {
+          const allItems = [...emailIssues, ...emailIndicators.filter(i => !emailIssues.includes(i))];
+          const indicatorRows = allItems.map(item => {
+            const isPositive = item.startsWith('✓') || item.startsWith('🟢');
+            const isInfo = item.startsWith('ℹ');
+            const isWarning = item.startsWith('⚠');
+            let dotColor;
+            if (isPositive) dotColor = 'var(--color-safe)';
+            else if (isInfo) dotColor = 'var(--primary-blue)';
+            else if (isWarning) dotColor = 'var(--color-suspicious)';
+            else dotColor = 'var(--color-malicious)';
+            return `<div class="hibp-source-item">
+              <span class="hibp-dot" style="background:${dotColor}"></span>
+              <span class="hibp-source-name" style="flex:1">${this.escapeHtml(item)}</span>
+            </div>`;
+          }).join('');
+          indicatorsSection = `
+            <div class="hibp-detail-card">
+              <h3 class="hibp-detail-title">Indicators Found</h3>
+              <div class="hibp-sources-grid">${indicatorRows}</div>
+            </div>`;
+        }
+
+        // 4. Recommended Actions for emails
+        const emailActions = {
+          safe: [
+            { icon: '✓', title: 'All Clear', desc: 'No phishing indicators detected. This email appears to be legitimate.' },
+            { icon: '🛡️', title: 'Stay Vigilant', desc: 'Always verify sender addresses and be cautious with unexpected attachments or links.' }
+          ],
+          suspicious: [
+            { icon: '🚫', title: 'Don\'t Click Links', desc: 'Avoid clicking any links in this email. They may lead to credential-harvesting phishing pages.' },
+            { icon: '🔍', title: 'Verify the Sender', desc: 'Contact the supposed sender through a different channel to confirm this email is legitimate.' },
+            { icon: '📎', title: 'Don\'t Download Attachments', desc: 'Attachments could contain malware. Don\'t open them unless you\'ve verified the sender.' }
+          ],
+          malicious: [
+            { icon: '🗑️', title: 'Delete Immediately', desc: 'This is a phishing email. Delete it and do not interact with any content in it.' },
+            { icon: '🚫', title: 'Don\'t Click Any Links', desc: 'Links in this email are designed to steal your credentials or install malware.' },
+            { icon: '🔑', title: 'Already Interacted?', desc: 'If you clicked a link or entered information, change your passwords immediately and enable 2FA.' },
+            { icon: '📢', title: 'Report It', desc: 'Report this email as phishing in your email client and notify your IT department.' }
+          ]
+        };
+        const eActions = emailActions[threat] || emailActions.safe;
+        const eActionsHTML = eActions.map(a => `
+          <div class="hibp-action-item">
+            <div class="hibp-action-icon">${a.icon}</div>
+            <div>
+              <strong>${a.title}</strong>
+              <p>${a.desc}</p>
+            </div>
+          </div>`).join('');
+
+        detailSections = `
+          <div class="hibp-details-container">
+            <div class="hibp-two-col">
+              <div class="hibp-detail-card hibp-main-col">
+                <h3 class="hibp-detail-title">What Was Found</h3>
+                ${emailFindingsHTML}
+              </div>
+              ${emailOverview}
+            </div>
+
+            <div class="hibp-detail-card">
+              <h3 class="hibp-detail-title">Detection Sources</h3>
+              <div class="hibp-sources-grid">${emailSourceItems.join('')}</div>
+            </div>
+
+            ${indicatorsSection}
+
+            <div class="hibp-detail-card">
+              <h3 class="hibp-detail-title">Recommended Actions</h3>
+              <div class="hibp-actions-grid">${eActionsHTML}</div>
+            </div>
+          </div>`;
+
+      } else {
+      // ──────────── URL-SPECIFIC DETAIL SECTIONS (original) ────────────
+
+      // 1. "What Happened" + "Scan Overview" side-by-side
+      let findingsHTML = '';
+      if (threat === 'safe') {
+        findingsHTML = `
+          <p style="color:var(--text-muted);line-height:1.7;margin:0">
+            All ${totalSources} security intelligence sources report this URL as clean. No phishing, malware, scam indicators, 
+            or suspicious patterns were detected. The domain appears legitimate and trustworthy.
+          </p>`;
+      } else {
+        const threats = result.rawThreats || [];
+        const items = [];
+        threats.forEach(t => {
+          const type = (t.type || t.threatType || '').toUpperCase();
+          if (type.includes('TYPOSQUAT')) items.push('This domain mimics a well-known brand name — a common tactic used by phishing websites to trick users.');
+          else if (type.includes('PHISHING')) items.push('This URL has been identified as a phishing page designed to steal credentials, personal data, or financial information.');
+          else if (type.includes('MALWARE') || type.includes('MALICIOUS')) items.push('This website may distribute malware or other harmful software that can compromise your device.');
+          else if (type.includes('SUSPICIOUS_STRUCTURE')) items.push('The URL structure contains patterns commonly found in fraudulent websites (excessive subdomains, suspicious path segments, etc.).');
+          else if (type.includes('DOMAIN_VERY_NEW') || type.includes('DOMAIN_NEW')) items.push('This domain was registered very recently, which is a common characteristic of scam and phishing websites.');
+          else if (type.includes('REDIRECT') || type.includes('PROTOCOL_DOWNGRADE')) items.push('This URL redirects through suspicious intermediate destinations, potentially to evade detection.');
+          else if (type.includes('NO_HTTPS') || type.includes('SSL')) items.push('This website lacks proper SSL/TLS encryption, meaning your data can be intercepted in transit.');
+        });
+        if (items.length === 0) {
+          items.push(threat === 'malicious' ? 'Multiple security checks flagged this URL as dangerous. It may be a phishing page, contain malware, or engage in other malicious activity.' : 'Some security sources raised concerns about this URL. Exercise caution when visiting.');
+        }
+        findingsHTML = items.map(i => `<p style="color:var(--text-muted);line-height:1.7;margin:0 0 0.75rem">${i}</p>`).join('');
+      }
+
+      const scanOverview = `
+        <div class="hibp-detail-card hibp-overview-sidebar">
+          <h3 class="hibp-detail-title">Scan Overview</h3>
+          <div class="hibp-overview-item">
+            <span class="hibp-dot" style="background:var(--accent-cyan)"></span>
+            <span class="hibp-overview-label">Risk Score:</span>
+            <strong style="color:${v.rawColor}">${score} / 100</strong>
+          </div>
+          <div class="hibp-overview-item">
+            <span class="hibp-dot" style="background:var(--accent-cyan)"></span>
+            <span class="hibp-overview-label">Sources Checked:</span>
+            <strong>${totalSources}</strong>
+          </div>
+          <div class="hibp-overview-item">
+            <span class="hibp-dot" style="background:var(--color-safe)"></span>
+            <span class="hibp-overview-label">Clean:</span>
+            <strong style="color:var(--color-safe)">${cleanCount}</strong>
+          </div>
+          ${flaggedCount > 0 ? `<div class="hibp-overview-item">
+            <span class="hibp-dot" style="background:var(--color-malicious)"></span>
+            <span class="hibp-overview-label">Flagged:</span>
+            <strong style="color:var(--color-malicious)">${flaggedCount}</strong>
+          </div>` : ''}
+          ${errorCount > 0 ? `<div class="hibp-overview-item">
+            <span class="hibp-dot" style="background:var(--color-suspicious)"></span>
+            <span class="hibp-overview-label">Errors:</span>
+            <strong style="color:var(--color-suspicious)">${errorCount}</strong>
+          </div>` : ''}
+          ${result.deescalated ? `<div class="hibp-overview-item">
+            <span class="hibp-dot" style="background:var(--primary-blue)"></span>
+            <span class="hibp-overview-label">De-escalated:</span>
+            <strong style="color:var(--primary-blue)">Yes</strong>
+          </div>` : ''}
+        </div>`;
+
+      // 2. "Security Sources" — HIBP "Compromised Data" style
+      const sourceGridItems = sd.map(src => {
+        const name = src.source || 'Unknown';
+        const safe = src.safe === true;
+        const isError = (result.errors || []).some(e => e.source === name);
+        let dotColor, statusLabel;
+        if (isError) { dotColor = 'var(--color-suspicious)'; statusLabel = 'Error'; }
+        else if (safe) { dotColor = 'var(--color-safe)'; statusLabel = 'Clean'; }
+        else { dotColor = 'var(--color-malicious)'; statusLabel = 'Flagged'; }
+
+        let detail = '';
+        const d = src.details || {};
+        if (name.includes('VirusTotal') && d.malicious !== undefined) detail = `${d.malicious}/${d.total} engines flagged`;
+        else if (name.includes('AbuseIPDB') && d.abuseScore !== undefined) detail = `Abuse: ${d.abuseScore}% · ${d.totalReports} reports`;
+        else if (name.includes('Shodan') && d.openPorts !== undefined) detail = `${d.openPorts} ports · ${d.vulns || 0} vulns`;
+        else if (name.includes('ML Model') || name.includes('BERT')) {
+          if (d.note) detail = d.note;
+          else if (d.phishingScore !== undefined) detail = safe ? 'Safe' : `Phishing: ${(d.phishingScore * 100).toFixed(1)}%`;
+        }
+        else if (name.includes('Heuristics')) {
+          const parts = [];
+          if (d.typosquattingDetected) parts.push('Typosquat');
+          if (d.structureIssues > 0) parts.push(`${d.structureIssues} issues`);
+          if (d.note === 'Trusted domain') parts.push('Trusted');
+          detail = parts.join(' · ') || (safe ? 'No issues' : 'Issues found');
+        }
+        else if (name.includes('Domain Age')) {
+          const age = d.domainAgeDays;
+          detail = (age !== null && age !== undefined) ? `${age} days old` : (d.note || 'Not found');
+        }
+        else if (name.includes('Redirect')) {
+          detail = (d.totalHops || 0) > 0 ? `${d.totalHops} hop(s)` : 'No redirects';
+        }
+        else if (name.includes('Safe Browsing')) detail = safe ? 'Not blacklisted' : 'Blacklisted';
+        else if (name.includes('URLhaus')) detail = safe ? 'Not in database' : 'Found in database';
+
+        return `<div class="hibp-source-item">
+          <span class="hibp-dot" style="background:${dotColor}"></span>
+          <span class="hibp-source-name">${this.escapeHtml(name)}</span>
+          <span class="hibp-source-status" style="color:${dotColor}">${statusLabel}</span>
+          ${detail ? `<span class="hibp-source-detail">${this.escapeHtml(detail)}</span>` : ''}
+        </div>`;
+      }).join('');
+
+      // 3. Risk Contributions (if not safe)
+      let contribSection = '';
+      if (result.contributions && threat !== 'safe') {
+        const c = result.contributions;
+        const h = c.heuristics || {};
+        const entries = [
+          { label: 'Google Safe Browsing', value: c.gsb },
+          { label: 'VirusTotal', value: c.virustotal },
+          { label: 'URLhaus', value: c.urlhaus },
+          { label: 'AbuseIPDB', value: c.abuseipdb },
+          { label: 'Shodan', value: c.shodan },
+          { label: 'Domain Age', value: c.domain_age },
+          { label: 'Redirect Analysis', value: c.redirect },
+          { label: 'ML Model (BERT)', value: c.ml_model },
+          { label: 'Typosquatting', value: h.typosquat },
+          { label: 'URL Structure', value: h.structure },
+          { label: 'SSL / Certificates', value: h.ssl },
+          { label: 'Domain Entropy', value: h.entropy },
+        ].filter(e => e.value > 0);
+
+        if (entries.length > 0) {
+          const bars = entries.map(e => {
+            const pct = Math.min(100, (e.value / 1.0) * 100);
+            const barColor = e.value >= 0.3 ? 'var(--color-malicious)' : e.value >= 0.1 ? 'var(--color-suspicious)' : 'var(--primary-blue)';
+            return `<div class="hibp-contrib-row">
+              <span class="hibp-contrib-label">${this.escapeHtml(e.label)}</span>
+              <div class="hibp-contrib-bar"><div class="hibp-contrib-fill" style="width:${pct}%;background:${barColor}"></div></div>
+              <span class="hibp-contrib-value">+${e.value.toFixed(3)}</span>
+            </div>`;
+          }).join('');
+          contribSection = `
+            <div class="hibp-detail-card">
+              <h3 class="hibp-detail-title">Risk Contributions</h3>
+              <div class="hibp-contrib-grid">${bars}</div>
+            </div>`;
+        }
+      }
+
+      // 4. Recommended Actions
+      const actionItems = {
+        safe: [
+          { icon: '✓', title: 'All Clear', desc: 'No action needed. This website passed all security checks.' },
+          { icon: '🔒', title: 'Stay Protected', desc: 'Keep your browser and PhishNet extension updated for continued protection.' }
+        ],
+        suspicious: [
+          { icon: '🚫', title: 'Don\'t Enter Personal Data', desc: 'Avoid entering passwords, credit card numbers, or personal information on this website.' },
+          { icon: '🔍', title: 'Verify the Source', desc: 'If someone sent you this link, confirm with them through a different channel that it\'s legitimate.' },
+          { icon: '🛡️', title: 'Use a VPN', desc: 'If you must visit, consider using a VPN and ensure your antivirus is active.' }
+        ],
+        malicious: [
+          { icon: '🚫', title: 'Do NOT Visit', desc: 'This website is designed to steal your information or harm your device. Close this link immediately.' },
+          { icon: '🗑️', title: 'Delete the Message', desc: 'If you received this link via email or message, delete it and block the sender.' },
+          { icon: '🔑', title: 'Change Your Password', desc: 'If you already visited and entered credentials, change your password immediately on the legitimate site.' },
+          { icon: '📢', title: 'Report It', desc: 'Report this URL to your IT department or to Google Safe Browsing to help protect others.' }
+        ]
+      };
+
+      const actions = actionItems[threat] || actionItems.safe;
+      const actionsHTML = actions.map(a => `
+        <div class="hibp-action-item">
+          <div class="hibp-action-icon">${a.icon}</div>
+          <div>
+            <strong>${a.title}</strong>
+            <p>${a.desc}</p>
+          </div>
+        </div>`).join('');
+
+      // 5. Analysis Explanation
+      let explanationSection = '';
+      if (result.explanation) {
+        explanationSection = `
+          <div class="hibp-detail-card">
+            <h3 class="hibp-detail-title">Analysis Explanation</h3>
+            <p style="color:var(--text-muted);line-height:1.7;margin:0">${this.escapeHtml(result.explanation)}</p>
+          </div>`;
+      }
+
+      // 6. Source Errors
+      let errorsSection = '';
+      if (result.errors && result.errors.length > 0) {
+        errorsSection = `
+          <div class="hibp-detail-card hibp-errors-card">
+            <h3 class="hibp-detail-title">Source Errors (${result.errors.length})</h3>
+            ${result.errors.map(e => `<div class="hibp-error-item"><strong>${this.escapeHtml(e.source || 'Unknown')}:</strong> ${this.escapeHtml(e.error || 'Unknown error')}</div>`).join('')}
+          </div>`;
+      }
+
+      detailSections = `
+        <div class="hibp-details-container">
+          <div class="hibp-two-col">
+            <div class="hibp-detail-card hibp-main-col">
+              <h3 class="hibp-detail-title">What Happened</h3>
+              ${findingsHTML}
+            </div>
+            ${scanOverview}
           </div>
 
-          <div class="issues-section">
-            <h4>Detected Issues:</h4>
-            <ul class="issues-list">
-              ${(result.issues || []).map(issue => `<li>${issue}</li>`).join('')}
-            </ul>
+          <div class="hibp-detail-card">
+            <h3 class="hibp-detail-title">Security Sources</h3>
+            <div class="hibp-sources-grid">${sourceGridItems}</div>
           </div>
 
-          <div class="analysis-box">
-            <h4>Analysis Summary:</h4>
-            <p class="analysis-summary">${result.summary || 'No additional information available.'}</p>
+          ${contribSection}
+
+          <div class="hibp-detail-card">
+            <h3 class="hibp-detail-title">Recommended Actions</h3>
+            <div class="hibp-actions-grid">${actionsHTML}</div>
           </div>
 
-          <div class="results-meta">
-            <span class="scan-time">Scan completed in ${result.scanTime || 1}s</span>
-          </div>
-        </div>
+          ${explanationSection}
+          ${errorsSection}
+        </div>`;
+      } // end URL branch
+    } // end hasDetailedData
+
+    return `
+      <div class="hibp-scan-result ${statusClass}">
+        ${heroCard}
+        ${overviewBar}
+        ${detailSections}
       </div>
     `;
   }
@@ -1110,6 +2149,22 @@ class ScanningSystem {
       closeBtn.addEventListener('click', (e) => {
         e.preventDefault();
         this.hideResults();
+      });
+    }
+
+    // Attach "View Details" toggle button handler
+    const techBtn = container?.querySelector('.view-full-report-btn');
+    if (techBtn) {
+      techBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const wrapper = container.querySelector('.hibp-scan-result');
+        if (wrapper) {
+          wrapper.classList.toggle('show-details');
+          const label = techBtn.querySelector('.tech-btn-label');
+          if (label) {
+            label.textContent = wrapper.classList.contains('show-details') ? 'Hide Details' : 'View Details';
+          }
+        }
       });
     }
 
@@ -1164,72 +2219,114 @@ class ScanningSystem {
    * Update dashboard recent scans table
    */
   updateDashboardTable() {
-    const tbody = document.querySelector("#scan-results-table tbody");
-    if (!tbody) return;
+    const listEl = document.getElementById('scan-results-list');
+    if (!listEl) return;
+
+    const PAGE_SIZE = 6;
+    if (typeof this._scanPageVisible === 'undefined') this._scanPageVisible = PAGE_SIZE;
+
+    const countEl = document.getElementById('scan-count');
+    if (countEl) countEl.textContent = `${this.scanHistory.length} scan${this.scanHistory.length !== 1 ? 's' : ''}`;
 
     if (this.scanHistory.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 30px;">No scan results yet.</td></tr>';
+      listEl.innerHTML = `
+        <div class="dash-scan-empty">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.3"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <p>No scan results yet.</p>
+        </div>`;
       return;
     }
 
-    // Ensure IDs exist before rendering actions (string ids)
+    // Ensure IDs exist before rendering
     this.scanHistory = this.ensureScanIds(this.scanHistory);
     localStorage.setItem('scanHistory', JSON.stringify(this.scanHistory));
 
-    tbody.innerHTML = '';
+    const visible = this.scanHistory.slice(0, this._scanPageVisible);
+    const remaining = this.scanHistory.length - visible.length;
 
-    this.scanHistory.forEach((scan) => {
-      const tr = document.createElement('tr');
+    listEl.innerHTML = visible.map(scan => this._buildScanCardHTML(scan)).join('');
 
-      // Determine result class based on threat level
-      const threatVal = (scan.threat || scan.status || 'safe').toString().toLowerCase();
-      let resultClass = '';
-      if (threatVal === 'safe') {
-        resultClass = 'result-safe';
-      } else if (threatVal === 'suspicious') {
-        resultClass = 'result-suspicious';
-      } else if (threatVal === 'malicious') {
-        resultClass = 'result-malicious';
-      }
-
-      const viewBtn = document.createElement('button');
-      viewBtn.className = 'action-btn view-btn';
-      viewBtn.dataset.action = 'view';
-      viewBtn.dataset.id = String(scan.id);
-      viewBtn.title = 'View detailed report';
-      viewBtn.textContent = 'View';
-
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'action-btn delete-btn';
-      deleteBtn.dataset.action = 'delete';
-      deleteBtn.dataset.id = String(scan.id);
-      deleteBtn.title = 'Delete this result';
-      deleteBtn.textContent = 'Delete';
-
-      const extractEmail = (text) => { try { const m = String(text||'').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i); return m ? m[0] : ''; } catch(e){return '';} };
-      const PLACEHOLDER_SENDER = 'Undefined User';
-      const displayTarget = String(scan.type || '').toLowerCase().includes('email') ? ((scan.senderEmail || extractEmail(scan.value) || PLACEHOLDER_SENDER)) : (scan.value || scan.url || '');
-
-      tr.innerHTML = `
-        <td title="${this.escapeHtml(displayTarget)}">${this.escapeHtml(displayTarget)}</td>
-        <td>${scan.type === 'url' ? 'URL' : 'EMAIL'}</td>
-        <td class="${resultClass}">${(scan.threat || scan.status || 'safe').toString().charAt(0).toUpperCase() + (scan.threat || scan.status || 'safe').toString().slice(1)}</td>
-        <td>${(()=>{const c=Number(scan.confidence);return Number.isFinite(c)?(c<=1?Math.round(c*100):Math.round(c))+'%':'N/A';})()}</td>
-        <td>${scan.date} ${scan.time}</td>
-        <td class="actions-cell"></td>
-      `;
-
-      const actionsCell = tr.querySelector('.actions-cell');
-      actionsCell.appendChild(viewBtn);
-      actionsCell.appendChild(deleteBtn);
-
-      tbody.appendChild(tr);
-    });
-
-    if (!this._dashboardActionsBound) {
-      tbody.addEventListener('click', (e) => this.handleDashboardAction(e));
-      this._dashboardActionsBound = true;
+    // Show More / Show Less footer
+    if (this.scanHistory.length > PAGE_SIZE) {
+      const showingText = remaining > 0
+        ? `Showing ${visible.length} of ${this.scanHistory.length}`
+        : `Showing all ${this.scanHistory.length} scans`;
+      const showMoreBtn = remaining > 0
+        ? `<button class="dash-scan-show-more" id="scan-show-more">Show More (${Math.min(PAGE_SIZE, remaining)})</button>`
+        : '';
+      const showLessBtn = this._scanPageVisible > PAGE_SIZE
+        ? `<button class="dash-scan-show-more" id="scan-show-less">Show Less</button>`
+        : '';
+      listEl.insertAdjacentHTML('beforeend', `
+        <div class="dash-scan-footer">
+          <span class="dash-scan-showing">${showingText}</span>
+          <div class="dash-scan-footer-btns">${showMoreBtn}${showLessBtn}</div>
+        </div>`);
+      const moreBtn = document.getElementById('scan-show-more');
+      if (moreBtn) moreBtn.addEventListener('click', () => {
+        this._scanPageVisible += PAGE_SIZE;
+        this.updateDashboardTable();
+      });
+      const lessBtn = document.getElementById('scan-show-less');
+      if (lessBtn) lessBtn.addEventListener('click', () => {
+        this._scanPageVisible = PAGE_SIZE;
+        this.updateDashboardTable();
+      });
     }
+
+    // Bind click actions
+    if (!this._dashboardScanListBound) {
+      listEl.addEventListener('click', (e) => {
+        const card = e.target.closest('.dash-scan-card');
+        if (!card) return;
+        const id = card.dataset.scanId;
+        if (id) this.viewScanReport(id);
+      });
+      this._dashboardScanListBound = true;
+    }
+  }
+
+  _buildScanCardHTML(scan) {
+    const threatMap = { safe:'safe', legitimate:'safe', suspicious:'suspicious', malicious:'malicious', phishing:'malicious' };
+    const colorMap = { safe:'#00FF88', suspicious:'#FFC107', malicious:'#FF4D4D' };
+    const labelMap = { safe:'Safe', suspicious:'Suspicious', malicious:'Malicious' };
+    const extractEmail = (text) => { try { const m = String(text||'').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i); return m ? m[0] : ''; } catch(e){return '';} };
+
+    const threatVal = (scan.threat || scan.status || 'safe').toString().toLowerCase();
+    const cls = threatMap[threatVal] || 'safe';
+    const color = colorMap[cls] || '#888';
+    const label = labelMap[cls] || threatVal;
+    const confNum = (()=>{ let c = Number(scan.confidence); if (!Number.isFinite(c) || c === 0) { const t = (scan.threat || scan.status || '').toString().toLowerCase(); if (t === 'safe') c = 95; else if (t === 'malicious') c = 85; else if (t === 'suspicious') c = 70; else c = 0; } return c <= 1 && c > 0 ? Math.round(c*100) : Math.round(c); })();
+    const confStr = confNum > 0 ? confNum + '%' : 'N/A';
+    const isEmail = String(scan.type || '').toLowerCase().includes('email');
+    const displayTarget = isEmail ? (scan.senderEmail || extractEmail(scan.value) || scan.value || '') : (scan.value || scan.url || '');
+    const truncated = displayTarget.length > 50 ? displayTarget.substring(0,50) + '\u2026' : displayTarget;
+    const typeIcon = isEmail
+      ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>'
+      : '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+    const timeStr = `${scan.date || ''} ${scan.time || ''}`.trim();
+    const sid = this.escapeHtml(String(scan.id));
+
+    return `
+      <div class="dash-scan-card" data-scan-id="${sid}">
+        <div class="dash-scan-status dash-scan-${cls}">
+          <span class="dash-scan-dot" style="background:${color}"></span>
+        </div>
+        <div class="dash-scan-info">
+          <div class="dash-scan-target" title="${this.escapeHtml(displayTarget)}">${this.escapeHtml(truncated)}</div>
+          <div class="dash-scan-meta-row">
+            <span class="dash-scan-type">${typeIcon} ${isEmail ? 'Email' : 'URL'}</span>
+            <span class="dash-scan-time">${timeStr}</span>
+          </div>
+        </div>
+        <div class="dash-scan-result">
+          <span class="dash-scan-badge dash-scan-badge-${cls}">${label}</span>
+          <div class="dash-scan-conf">
+            <div class="dash-scan-conf-bar"><div class="dash-scan-conf-fill" style="width:${confNum}%;background:${color}"></div></div>
+            <span class="dash-scan-conf-text">${confStr}</span>
+          </div>
+        </div>
+      </div>`;
   }
 
   async handleDashboardAction(event) {
@@ -1373,6 +2470,7 @@ class ScanningSystem {
     }
 
     localStorage.setItem('selectedScanId', String(scanId));
+    localStorage.setItem('selectedScanTime', String(Date.now()));
     try {
       // If we preserved the original server record, use that for full detail
       if (scan && scan.raw) {
@@ -1609,7 +2707,7 @@ class ScanningSystem {
             <div class="status-info">
               <p class="status-label">Threat Status</p>
               <p class="status-title" style="color: ${threatColors[scan.threat]};">${threatLabels[scan.threat]}</p>
-              <p class="status-sub">Confidence: ${(()=>{const c=Number(scan.confidence);return Number.isFinite(c)?(c<=1?Math.round(c*100):Math.round(c))+'%':'N/A';})()}</p>
+              <p class="status-sub">Confidence: ${(()=>{let c=Number(scan.confidence);if(!Number.isFinite(c)||c===0){const t=(scan.threat||'').toLowerCase();c=t==='safe'?95:t==='malicious'?85:t==='suspicious'?70:0;}return c>0?(c<=1?Math.round(c*100):Math.round(c))+'%':'N/A';})()}</p>
             </div>
           </div>
         </div>
@@ -1624,13 +2722,14 @@ class ScanningSystem {
             <p class="info-value">${scan.time}</p>
           </div>
           <div class="info-item">
-            <p class="info-label">Confidence Score</p>
-            <p class="info-value">${(()=>{const c=Number(scan.confidence);return Number.isFinite(c)?(c<=1?Math.round(c*100):Math.round(c))+'%':'N/A';})()}</p>
+            <p class="info-label">Risk Score</p>
+            <p class="info-value" style="color:${scan.threat === 'safe' ? '#00FF88' : scan.threat === 'malicious' ? '#FF4D4D' : '#FFC107'}">${scan.riskPercent != null ? scan.riskPercent + '/100' : (()=>{let c=Number(scan.confidence);if(!Number.isFinite(c)||c===0){const t=(scan.threat||'').toLowerCase();c=t==='safe'?95:t==='malicious'?85:t==='suspicious'?70:0;}return c>0?(c<=1?Math.round(c*100):Math.round(c))+'/100':'N/A';})()}</p>
           </div>
           <div class="info-item">
             <p class="info-label">Risk Level</p>
             <p class="info-value">${(function(rv){ try{ const s=String(rv||'').trim().toLowerCase(); if(s==='safe') return 'Low'; if(s==='suspicious') return 'Medium'; if(s==='malicious') return 'High'; if(['low','medium','high','critical'].includes(s)) return s.charAt(0).toUpperCase()+s.slice(1); }catch(e){} return 'Unknown'; })(scan.riskLevel)}</p>
           </div>
+          ${scan.sourceDetails && scan.sourceDetails.length > 0 ? `<div class="info-item"><p class="info-label">Sources Checked</p><p class="info-value">${scan.sourceDetails.length} security sources</p></div>` : ''}
         </div>
 
         <!-- Threat Analysis Results Section -->
@@ -1738,6 +2837,88 @@ class ScanningSystem {
           </style>
           ` : '<p style="color: var(--text-muted);">No issues recorded.</p>'}
         </div>
+
+        <!-- Detailed Security Sources Grid (from 9-source scanner) -->
+        ${(scan.sourceDetails && scan.sourceDetails.length > 0) ? `
+        <div class="section">
+          <h3 class="section-title">Security Sources Analysis (${scan.sourceDetails.length} Sources)</h3>
+          <div class="src-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0.75rem;">
+            ${scan.sourceDetails.map(src => {
+              const name = src.source || 'Unknown';
+              const safe = src.safe === true;
+              const isError = (scan.errors || []).some(e => e.source === name);
+              let statusText, statusCls;
+              if (isError) { statusText = 'Error'; statusCls = 'src-error'; }
+              else if (safe) { statusText = 'Clean'; statusCls = 'src-clean'; }
+              else { statusText = 'Flagged'; statusCls = 'src-flagged'; }
+
+              let detailLine = '';
+              const d = src.details || {};
+              if (name.includes('VirusTotal') && d.malicious !== undefined) detailLine = d.malicious + '/' + d.total + ' engines flagged';
+              else if (name.includes('AbuseIPDB') && d.abuseScore !== undefined) detailLine = 'Abuse: ' + d.abuseScore + '% · ' + d.totalReports + ' reports';
+              else if (name.includes('Shodan') && d.openPorts !== undefined) detailLine = d.openPorts + ' ports · ' + (d.vulns || 0) + ' vulns';
+              else if (name.includes('ML Model') || name.includes('BERT')) {
+                if (d.note) detailLine = d.note;
+                else if (d.phishingScore !== undefined) detailLine = safe ? 'Safe' : 'Phishing: ' + (d.phishingScore * 100).toFixed(1) + '%';
+              }
+              else if (name.includes('Heuristics')) {
+                const p = []; if (d.typosquattingDetected) p.push('Typosquat'); if (d.structureIssues > 0) p.push(d.structureIssues + ' issues'); if (d.note === 'Trusted domain') p.push('Trusted');
+                detailLine = p.join(' · ') || (safe ? 'No issues' : 'Issues found');
+              }
+              else if (name.includes('Domain Age')) { const age = d.domainAgeDays; detailLine = (age != null) ? age + ' days old' : (d.note || 'Not found'); }
+              else if (name.includes('Redirect')) { detailLine = (d.totalHops || 0) > 0 ? d.totalHops + ' hop(s)' : 'No redirects'; }
+              else if (name.includes('Safe Browsing')) detailLine = safe ? 'Not blacklisted' : 'Blacklisted';
+              else if (name.includes('URLhaus')) detailLine = safe ? 'Not in database' : 'Found in database';
+
+              return '<div class="src-card ' + statusCls + '" style="padding:0.75rem;border-radius:8px;border:1px solid ' + (isError ? 'rgba(255,193,7,0.3)' : safe ? 'rgba(0,255,136,0.15)' : 'rgba(255,77,77,0.3)') + ';background:' + (isError ? 'rgba(255,193,7,0.05)' : safe ? 'rgba(0,255,136,0.03)' : 'rgba(255,77,77,0.05)') + '"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span style="font-weight:600;font-size:0.85rem;">' + this.escapeHtml(name) + '</span><span style="font-size:0.7rem;padding:2px 8px;border-radius:12px;font-weight:600;background:' + (isError ? 'rgba(255,193,7,0.2);color:#FFC107' : safe ? 'rgba(0,255,136,0.15);color:#00FF88' : 'rgba(255,77,77,0.2);color:#FF4D4D') + ';">' + statusText + '</span></div>' + (detailLine ? '<div style="font-size:0.75rem;color:rgba(255,255,255,0.5);">' + this.escapeHtml(detailLine) + '</div>' : '') + '</div>';
+            }).join('')}
+          </div>
+        </div>
+        ` : ''}
+
+        <!-- Risk Contributions Breakdown -->
+        ${(scan.contributions && scan.threat !== 'safe') ? (() => {
+          const c = scan.contributions;
+          const h = c.heuristics || {};
+          const entries = [
+            { label: 'Google Safe Browsing', value: c.gsb || 0 },
+            { label: 'VirusTotal', value: c.virustotal || 0 },
+            { label: 'URLhaus', value: c.urlhaus || 0 },
+            { label: 'AbuseIPDB', value: c.abuseipdb || 0 },
+            { label: 'Shodan', value: c.shodan || 0 },
+            { label: 'Domain Age', value: c.domain_age || 0 },
+            { label: 'Redirect Analysis', value: c.redirect || 0 },
+            { label: 'ML Model (BERT)', value: c.ml_model || 0 },
+            { label: 'Typosquatting', value: h.typosquat || 0 },
+            { label: 'URL Structure', value: h.structure || 0 },
+            { label: 'SSL / Certificates', value: h.ssl || 0 },
+            { label: 'Domain Entropy', value: h.entropy || 0 },
+          ].filter(e => e.value > 0);
+
+          if (entries.length === 0) return '';
+          return '<div class="section"><h3 class="section-title">Risk Contribution Breakdown</h3><div style="display:flex;flex-direction:column;gap:0.5rem;">' +
+            entries.map(e => {
+              const pct = Math.min(100, (e.value / 1.0) * 100);
+              const color = e.value >= 0.3 ? '#FF4D4D' : e.value >= 0.1 ? '#FFC107' : '#0b63d9';
+              return '<div style="display:grid;grid-template-columns:160px 1fr 60px;align-items:center;gap:0.5rem;"><span style="font-size:0.8rem;color:rgba(255,255,255,0.7);">' + this.escapeHtml(e.label) + '</span><div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + color + ';border-radius:4px;"></div></div><span style="font-size:0.75rem;color:rgba(255,255,255,0.5);text-align:right;">+' + e.value.toFixed(3) + '</span></div>';
+            }).join('') + '</div></div>';
+        })() : ''}
+
+        <!-- Analysis Explanation -->
+        ${scan.explanation ? `
+        <div class="section">
+          <h3 class="section-title">Analysis Explanation</h3>
+          <p style="color: rgba(255,255,255,0.7); font-size: 0.9rem; padding: 0.75rem; background: rgba(255,255,255,0.03); border-left: 3px solid var(--primary); border-radius: 4px;">${this.escapeHtml(scan.explanation)}</p>
+        </div>
+        ` : ''}
+
+        <!-- Source Errors -->
+        ${(scan.errors && scan.errors.length > 0) ? `
+        <div class="section">
+          <h3 class="section-title">Source Errors (${scan.errors.length})</h3>
+          ${scan.errors.map(e => '<div style="padding:0.5rem 0.75rem;margin-bottom:0.5rem;background:rgba(255,193,7,0.05);border-left:3px solid #FFC107;border-radius:4px;"><strong style="color:#FFC107;">' + this.escapeHtml(e.source || 'Unknown') + ':</strong> <span style="color:rgba(255,255,255,0.6);">' + this.escapeHtml(e.error || 'Unknown error') + '</span></div>').join('')}
+        </div>
+        ` : ''}
 
         <div class="summary-box">
           <h3 class="section-title">Summary</h3>
@@ -1959,7 +3140,7 @@ class ScanningSystem {
       </div>
       <div class="status-box">
         <div class="status-label">Confidence Score</div>
-        <div class="status-value">${(()=>{const c=Number(scan.confidence);return Number.isFinite(c)?(c<=1?Math.round(c*100):Math.round(c))+'%':'N/A';})()}</div>
+        <div class="status-value">${(()=>{let c=Number(scan.confidence);if(!Number.isFinite(c)||c===0){const t=(scan.threat||'').toLowerCase();c=t==='safe'?95:t==='malicious'?85:t==='suspicious'?70:0;}return c>0?(c<=1?Math.round(c*100):Math.round(c))+'%':'N/A';})()}</div>
       </div>
     </div>
 

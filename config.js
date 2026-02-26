@@ -24,18 +24,18 @@ const config = {
     endpoints: {
       // Authentication (uses Auth backend - port 5000)
       auth: {
-        login: '/api/auth/login',
-        register: '/api/auth/register',
-        logout: '/api/auth/logout',
-        refreshToken: '/api/auth/refresh',
-        verify: '/api/auth/verify'
+        login: '/api/v1/auth/login',
+        register: '/api/v1/auth/signup',
+        logout: '/api/v1/auth/logout',
+        refreshToken: '/api/v1/auth/refresh-token',
+        verify: '/api/v1/auth/verify'
       },
       // Users (uses Auth backend - port 5000)
       users: {
-        profile: '/api/users/profile',
-        history: '/api/users/history',
-        update: '/api/users/profile',
-        settings: '/api/users/settings'
+        profile: '/api/v1/users/profile',
+        history: '/api/v1/urls/history',
+        update: '/api/v1/users/profile',
+        settings: '/api/v1/users/settings'
       },
       // Scanning - DistilBERT Phishing Detection (uses ML backend - port 3000)
       scan: {
@@ -47,8 +47,8 @@ const config = {
       },
       // Save scan results to history (uses Auth backend - port 5000)
       history: {
-        saveUrl: '/api/scan/url',
-        saveEmail: '/api/scan/email'
+        saveUrl: '/api/v1/urls/check',
+        saveEmail: '/api/v1/urls/check'
       },
       // Dashboard
       dashboard: {
@@ -74,8 +74,12 @@ const config = {
 // Helper function to build full API URLs
 // Auth endpoints use port 5000 (MongoDB backend), scan endpoints use port 3000 (ML backend)
 function getApiUrl(endpoint) {
-  // Auth and user endpoints go to Auth backend (port 5000)
-  if (endpoint.startsWith('/api/auth') || 
+  // Auth, user, and URL endpoints go to Auth backend (port 5000)
+  if (endpoint.startsWith('/api/v1/auth') || 
+      endpoint.startsWith('/api/v1/users') || 
+      endpoint.startsWith('/api/v1/urls') ||
+      endpoint.startsWith('/api/v1/analytics') ||
+      endpoint.startsWith('/api/auth') || 
       endpoint.startsWith('/api/users') || 
       endpoint.startsWith('/api/analytics')) {
     return `${config.api.authBaseURL}${endpoint}`;

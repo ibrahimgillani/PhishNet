@@ -16,6 +16,388 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ===== Settings Layout ===== */
+    .stg-layout {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 1.5rem;
+      margin-top: 1rem;
+      align-items: start;
+      width: 100%;
+    }
+    .stg-content {
+      min-width: 0;
+      width: 100%;
+    }
+
+    /* ===== Page Header ===== */
+    .stg-page-header { margin-bottom: 0.25rem; }
+    .stg-page-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0 0 0.25rem 0;
+    }
+    .stg-page-sub {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    /* ===== Sidebar Nav ===== */
+    .stg-nav {
+      background: var(--card-bg, #0f0f10);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-lg, 12px);
+      padding: 0.5rem;
+      position: sticky;
+      top: 100px;
+      grid-area: auto;
+      justify-self: auto;
+    }
+    .stg-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.65rem 0.85rem;
+      border-radius: var(--radius-sm, 6px);
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      font-family: 'Inter', sans-serif;
+    }
+    .stg-nav-item:hover {
+      background: rgba(255,255,255,0.04);
+      color: var(--text-primary);
+    }
+    .stg-nav-item.active {
+      background: rgba(11,99,217,0.1);
+      color: var(--primary-blue, #0B63D9);
+    }
+    .stg-nav-item svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.6; }
+    .stg-nav-item.active svg { opacity: 1; }
+    .stg-nav-item.danger { color: #FF4D4D; }
+    .stg-nav-item.danger:hover { background: rgba(255,77,77,0.08); }
+    .stg-nav-item.danger.active { background: rgba(255,77,77,0.1); }
+    .stg-nav-divider {
+      height: 1px;
+      background: rgba(255,255,255,0.04);
+      margin: 0.35rem 0.5rem;
+    }
+
+    /* ===== Content Panel ===== */
+    .stg-panel {
+      display: none;
+    }
+    .stg-panel.active {
+      display: block;
+      animation: stgFadeIn 0.25s ease-out;
+    }
+    @keyframes stgFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ===== Card ===== */
+    .stg-card {
+      background: var(--card-bg, #0f0f10);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-lg, 12px);
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .stg-card-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0 0 0.3rem 0;
+    }
+    .stg-card-desc {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin: 0 0 1.25rem 0;
+      line-height: 1.5;
+    }
+
+    /* ===== Form Overrides ===== */
+    .stg-form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    .stg-form-group { margin-bottom: 1rem; }
+    .stg-form-group:last-child { margin-bottom: 0; }
+    .stg-label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+    .stg-input {
+      width: 100%;
+      padding: 0.6rem 0.85rem;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: var(--radius-sm, 6px);
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      transition: border-color 0.2s ease;
+      box-sizing: border-box;
+      display: block;
+    }
+    .stg-form-group,
+    .stg-form-grid {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    form {
+      width: 100%;
+    }
+    .stg-input:focus {
+      outline: none;
+      border-color: rgba(11,99,217,0.5);
+    }
+    .stg-input::placeholder { color: rgba(255,255,255,0.2); }
+    .stg-select {
+      width: 100%;
+      padding: 0.6rem 0.85rem;
+      background: #0f0f10;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: var(--radius-sm, 6px);
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      cursor: pointer;
+      box-sizing: border-box;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      padding-right: 2rem;
+    }
+    .stg-select option { background: #0f0f10; color: #e5e7eb; }
+
+    /* ===== Avatar ===== */
+    .stg-avatar-row {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .stg-avatar {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--primary-blue, #0B63D9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 700;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: cover;
+      box-shadow: 0 0 0 3px rgba(11,99,217,0.2);
+    }
+    .stg-avatar-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .stg-avatar-btns {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .stg-avatar-hint {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    /* ===== Buttons ===== */
+    .stg-btn {
+      padding: 0.55rem 1.25rem;
+      border-radius: 20px;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .stg-btn-primary {
+      background: var(--primary-blue, #0B63D9);
+      color: #fff;
+    }
+    .stg-btn-primary:hover { background: #0952b8; }
+    .stg-btn-outline {
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .stg-btn-outline:hover { background: rgba(255,255,255,0.06); }
+    .stg-btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+    }
+    .stg-btn-ghost:hover { color: var(--text-primary); }
+    .stg-btn-danger {
+      background: rgba(255,77,77,0.08);
+      color: #FF4D4D;
+      border: 1px solid rgba(255,77,77,0.22);
+      font-weight: 600;
+      letter-spacing: .01em;
+      white-space: nowrap;
+      transition: all .25s;
+    }
+    .stg-btn-danger:hover { background: #FF4D4D; color: #fff; border-color: #FF4D4D; box-shadow: 0 4px 18px rgba(255,77,77,.25); }
+    .stg-btn-remove {
+      background: none;
+      border: none;
+      color: #FF4D4D;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+    .stg-btn-remove:hover { text-decoration: underline; }
+
+    /* ===== Toggle Row ===== */
+    .stg-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .stg-toggle-row:last-child { border-bottom: none; }
+    .stg-toggle-info { flex: 1; }
+    .stg-toggle-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0 0 0.15rem 0;
+    }
+    .stg-toggle-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin: 0;
+      line-height: 1.4;
+    }
+
+    /* ===== Password Input ===== */
+    .stg-pw-wrap {
+      position: relative;
+    }
+    .stg-pw-wrap .stg-input { padding-right: 2.5rem; }
+    .stg-pw-toggle {
+      position: absolute;
+      right: 0.6rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .stg-pw-toggle:hover { color: var(--text-primary); }
+    .stg-pw-toggle svg { width: 16px; height: 16px; }
+
+    /* ===== Danger Zone ===== */
+    .stg-danger-zone{display:flex;flex-direction:column;gap:1.25rem}
+    .stg-danger-header{display:flex;align-items:center;gap:.65rem;margin-bottom:.25rem}
+    .stg-danger-header svg{width:20px;height:20px;color:#FF4D4D;flex-shrink:0}
+    .stg-danger-header h3{font-size:1.05rem;font-weight:700;color:#FF4D4D;margin:0;letter-spacing:-.01em}
+    .stg-danger-notice{display:flex;align-items:flex-start;gap:.75rem;padding:.85rem 1rem;background:rgba(255,77,77,.05);border:1px solid rgba(255,77,77,.12);border-radius:var(--radius-md,10px);font-size:.78rem;color:var(--text-muted);line-height:1.55}
+    .stg-danger-notice svg{width:16px;height:16px;color:#FF4D4D;flex-shrink:0;margin-top:1px}
+    .stg-danger-card {
+      background: var(--card-bg, #0f0f10);
+      border: 1px solid rgba(255,77,77,0.18);
+      border-radius: var(--radius-lg, 12px);
+      padding: 0;
+      overflow: hidden;
+      position: relative;
+    }
+    .stg-danger-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:#FF4D4D}
+    .stg-danger-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+      padding: 1.25rem 1.5rem 1.25rem 1.75rem;
+    }
+    .stg-danger-icon{width:40px;height:40px;border-radius:var(--radius-md,10px);background:rgba(255,77,77,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .stg-danger-icon svg{width:18px;height:18px;color:#FF4D4D}
+    .stg-danger-info{flex:1;min-width:0}
+    .stg-danger-title {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #fff;
+      margin: 0 0 0.2rem 0;
+    }
+    .stg-danger-desc {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin: 0;
+      line-height:1.5;
+    }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 900px) {
+      .stg-layout {
+        grid-template-columns: 1fr;
+      }
+      .stg-nav {
+        position: static;
+        display: flex;
+        overflow-x: auto;
+        gap: 0.25rem;
+        padding: 0.35rem;
+        order: -1;
+      }
+      .stg-nav-item {
+        white-space: nowrap;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.75rem;
+      }
+      .stg-nav-divider { display: none; }
+    }
+    @media (max-width: 640px) {
+      .stg-form-grid { grid-template-columns: 1fr; }
+      .stg-avatar-row { flex-direction: column; text-align: center; }
+      .stg-avatar-actions { align-items: center; }
+    }
+    @media (max-width: 480px) {
+      .stg-card { padding: 1.25rem; }
+      .stg-danger-row { flex-direction: column; align-items: flex-start; }
+      .stg-danger-icon { display: none; }
+    }
+  </style>
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -23,6 +405,16 @@
   <header>
     <div class="header-container">
       <a href="index.html" class="brand-logo">
+        <svg class="logo-icon" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M14 2L4 7v6.5c0 6.08 4.27 11.77 10 13.5 5.73-1.73 10-7.42 10-13.5V7L14 2z" fill="url(#logo-grad)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+          <path d="M10 14.5l2.5 2.5L18 11.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <defs>
+            <linearGradient id="logo-grad" x1="4" y1="2" x2="24" y2="26" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#0B63D9"/>
+              <stop offset="100%" stop-color="#00B7D9"/>
+            </linearGradient>
+          </defs>
+        </svg>
         <span class="logo-text">PhishNet</span>
       </a>
 
@@ -33,7 +425,7 @@
       <div class="header-actions">
         <div class="auth-buttons">
         </div>
-        <div class="user-avatar">JD</div>
+        <div class="user-avatar"></div>
       </div>
     </div>
   </header>
@@ -41,218 +433,235 @@
   <main id="main-content">
     <section>
       <div class="container">
-        <h1 style="margin-bottom: 2rem;">Account Settings</h1>
-
-        <!-- Profile Section -->
-        <div class="settings-section">
-          <h2>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-            Profile Information
-          </h2>
-
-          <div class="avatar-upload">
-            <div class="avatar-preview" id="settingsAvatarPreview">JD</div>
-            <div class="avatar-controls">
-              <div class="avatar-buttons-group">
-                <input type="file" id="avatarFile" accept="image/*" style="display:none;">
-                <button type="button" class="btn btn-outline btn-sm" id="avatarUploadBtn">Upload</button>
-                <span class="button-separator">/</span>
-                <button type="button" class="btn btn-ghost btn-sm btn-remove" id="avatarRemoveBtn">Remove</button>
-              </div>
-              <div id="avatarUploadStatus" class="avatar-status">
-                <svg class="spinner-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <span>Uploading...</span>
-              </div>
-            </div>
-          </div>
-
-          <form id="settings-profile-form" class="animate-fade-in" style="animation-delay: 0.1s;">
-            <div class="grid grid-2">
-              <div class="form-group">
-                <label for="firstName" class="form-label">First Name</label>
-                <input type="text" id="firstName" class="form-input" placeholder="First name">
-              </div>
-              <div class="form-group">
-                <label for="lastName" class="form-label">Last Name</label>
-                <input type="text" id="lastName" class="form-input" placeholder="Last name">
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="email" class="form-label">Email Address</label>
-              <input type="email" id="email" class="form-input" placeholder="you@example.com">
-            </div>
-
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-          </form>
+        <div class="stg-page-header">
+          <h1 class="stg-page-title">Account Settings</h1>
+          <p class="stg-page-sub">Manage your profile, security, and preferences</p>
         </div>
 
-        <!-- Notification Settings -->
-        <div class="settings-section">
-          <h2>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            </svg>
-            Notifications
-          </h2>
+        <div class="stg-layout">
+          <!-- Sidebar Navigation -->
+          <nav class="stg-nav">
+            <button class="stg-nav-item active" data-panel="profile">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Profile
+            </button>
+            <button class="stg-nav-item" data-panel="notifications">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              Notifications
+            </button>
+            <button class="stg-nav-item" data-panel="security">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Security
+            </button>
+            <button class="stg-nav-item" data-panel="preferences">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              Preferences
+            </button>
+            <div class="stg-nav-divider"></div>
+            <button class="stg-nav-item danger" data-panel="danger">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Danger Zone
+            </button>
+          </nav>
 
-          <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; background: rgba(255, 255, 255, 0.03); border-radius: var(--radius-md);">
-              <div style="flex: 1;">
-                <h4 style="font-size: 0.9375rem; margin-bottom: 0.25rem; color: white;">Email Notifications</h4>
-                <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0;">Receive email alerts when threats are detected</p>
-              </div>
-              <label class="toggle-switch" style="flex-shrink: 0; margin-left: 1rem;">
-                <input type="checkbox" checked class="notification-toggle" data-label="Email Notifications">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
+          <!-- Content Panels -->
+          <div class="stg-content">
 
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; background: rgba(255, 255, 255, 0.03); border-radius: var(--radius-md);">
-              <div style="flex: 1;">
-                <h4 style="font-size: 0.9375rem; margin-bottom: 0.25rem; color: white;">Browser Notifications</h4>
-                <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0;">Get real-time browser notifications</p>
-              </div>
-              <label class="toggle-switch" style="flex-shrink: 0; margin-left: 1rem;">
-                <input type="checkbox" class="notification-toggle" data-label="Browser Notifications">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
+            <!-- ===== Profile Panel ===== -->
+            <div class="stg-panel active" id="panel-profile">
+              <div class="stg-card">
+                <h3 class="stg-card-title">Profile Information</h3>
+                <p class="stg-card-desc">Update your personal details and profile photo.</p>
 
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; background: rgba(255, 255, 255, 0.03); border-radius: var(--radius-md);">
-              <div style="flex: 1;">
-                <h4 style="font-size: 0.9375rem; margin-bottom: 0.25rem; color: white;">Weekly Reports</h4>
-                <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0;">Receive weekly security summary reports</p>
-              </div>
-              <label class="toggle-switch" style="flex-shrink: 0; margin-left: 1rem;">
-                <input type="checkbox" checked class="notification-toggle" data-label="Weekly Reports">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; background: rgba(255, 255, 255, 0.03); border-radius: var(--radius-md);">
-              <div style="flex: 1;">
-                <h4 style="font-size: 0.9375rem; margin-bottom: 0.25rem; color: white;">Security Alerts</h4>
-                <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0;">Critical security threat notifications</p>
-              </div>
-              <label class="toggle-switch" style="flex-shrink: 0; margin-left: 1rem;">
-                <input type="checkbox" checked class="notification-toggle" data-label="Security Alerts">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <!-- Security Settings -->
-        <div class="settings-section">
-          <h2>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            Security
-          </h2>
-
-          <form id="settings-password-form">
-            <h3 style="font-size: 1.125rem; margin-bottom: 1rem;">Change Password</h3>
-            <div class="form-group">
-              <label for="currentPassword" class="form-label">Current Password</label>
-              <div class="input-with-toggle">
-                <input type="password" id="currentPassword" class="form-input password-field" placeholder="Enter current password">
-                <button type="button" class="pw-toggle" id="currentPwToggle" aria-label="Toggle password visibility">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div class="grid grid-2" style="margin-bottom: 1rem;">
-              <div class="form-group">
-                <label for="newPassword" class="form-label">New Password</label>
-                <div class="input-with-toggle">
-                  <input type="password" id="newPassword" class="form-input password-field" placeholder="Enter new password">
-                  <button type="button" class="pw-toggle" id="newPwToggle" aria-label="Toggle password visibility">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                      <circle cx="12" cy="12" r="3"/>
-                    </svg>
-                  </button>
+                <div class="stg-avatar-row">
+                  <div class="stg-avatar" id="settingsAvatarPreview"></div>
+                  <div class="stg-avatar-actions">
+                    <div class="stg-avatar-btns">
+                      <input type="file" id="avatarFile" accept="image/*" style="display:none;">
+                      <button type="button" class="stg-btn stg-btn-outline" id="avatarUploadBtn">Upload Photo</button>
+                      <button type="button" class="stg-btn-remove" id="avatarRemoveBtn">Remove</button>
+                    </div>
+                    <p class="stg-avatar-hint">JPG, PNG or GIF. Max 2MB.</p>
+                    <div id="avatarUploadStatus" class="avatar-status">
+                      <svg class="spinner-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      <span>Uploading...</span>
+                    </div>
+                  </div>
                 </div>
+
+                <form id="settings-profile-form">
+                  <div class="stg-form-grid">
+                    <div class="stg-form-group">
+                      <label for="firstName" class="stg-label">First Name</label>
+                      <input type="text" id="firstName" class="stg-input" placeholder="First name">
+                    </div>
+                    <div class="stg-form-group">
+                      <label for="lastName" class="stg-label">Last Name</label>
+                      <input type="text" id="lastName" class="stg-input" placeholder="Last name">
+                    </div>
+                  </div>
+                  <div class="stg-form-group">
+                    <label for="email" class="stg-label">Email Address</label>
+                    <input type="email" id="email" class="stg-input" placeholder="you@example.com">
+                  </div>
+                  <button type="submit" class="stg-btn stg-btn-primary">Save Changes</button>
+                </form>
               </div>
-              <div class="form-group">
-                <label for="confirmPassword" class="form-label">Confirm Password</label>
-                <div class="input-with-toggle">
-                  <input type="password" id="confirmPassword" class="form-input password-field" placeholder="Confirm new password">
-                  <button type="button" class="pw-toggle" id="confirmPwToggle" aria-label="Toggle password visibility">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                      <circle cx="12" cy="12" r="3"/>
-                    </svg>
-                  </button>
+            </div>
+
+            <!-- ===== Notifications Panel ===== -->
+            <div class="stg-panel" id="panel-notifications">
+              <div class="stg-card">
+                <h3 class="stg-card-title">Notification Preferences</h3>
+                <p class="stg-card-desc">Choose how and when you want to be notified.</p>
+
+                <div class="stg-toggle-row">
+                  <div class="stg-toggle-info">
+                    <p class="stg-toggle-title">Email Notifications</p>
+                    <p class="stg-toggle-desc">Receive email alerts when threats are detected</p>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" checked class="notification-toggle" data-label="Email Notifications">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div class="stg-toggle-row">
+                  <div class="stg-toggle-info">
+                    <p class="stg-toggle-title">Browser Notifications</p>
+                    <p class="stg-toggle-desc">Get real-time browser push notifications</p>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" class="notification-toggle" data-label="Browser Notifications">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div class="stg-toggle-row">
+                  <div class="stg-toggle-info">
+                    <p class="stg-toggle-title">Weekly Reports</p>
+                    <p class="stg-toggle-desc">Receive weekly security summary reports</p>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" checked class="notification-toggle" data-label="Weekly Reports">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div class="stg-toggle-row">
+                  <div class="stg-toggle-info">
+                    <p class="stg-toggle-title">Security Alerts</p>
+                    <p class="stg-toggle-desc">Critical security threat notifications</p>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" checked class="notification-toggle" data-label="Security Alerts">
+                    <span class="toggle-slider"></span>
+                  </label>
                 </div>
               </div>
             </div>
 
-            <button type="submit" class="btn btn-primary">Update Password</button>
-          </form>
-        </div>
+            <!-- ===== Security Panel ===== -->
+            <div class="stg-panel" id="panel-security">
+              <div class="stg-card">
+                <h3 class="stg-card-title">Change Password</h3>
+                <p class="stg-card-desc">Ensure your account stays secure by using a strong password.</p>
 
-        <!-- Preferences -->
-        <div class="settings-section">
-          <h2>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"/>
-            </svg>
-            Preferences
-          </h2>
-
-          <form id="settings-preferences-form">
-            <div class="form-group">
-              <label for="timezone" class="form-label">Timezone</label>
-              <select id="timezone" class="form-select">
-                <option>Pacific Time (PT)</option>
-                <option>Mountain Time (MT)</option>
-                <option>Central Time (CT)</option>
-                <option selected>Eastern Time (ET)</option>
-              </select>
+                <form id="settings-password-form">
+                  <div class="stg-form-group">
+                    <label for="currentPassword" class="stg-label">Current Password</label>
+                    <div class="stg-pw-wrap">
+                      <input type="password" id="currentPassword" class="stg-input password-field" placeholder="Enter current password">
+                      <button type="button" class="stg-pw-toggle pw-toggle" id="currentPwToggle" aria-label="Toggle password visibility">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="stg-form-grid">
+                    <div class="stg-form-group">
+                      <label for="newPassword" class="stg-label">New Password</label>
+                      <div class="stg-pw-wrap">
+                        <input type="password" id="newPassword" class="stg-input password-field" placeholder="Enter new password">
+                        <button type="button" class="stg-pw-toggle pw-toggle" id="newPwToggle" aria-label="Toggle password visibility">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="stg-form-group">
+                      <label for="confirmPassword" class="stg-label">Confirm Password</label>
+                      <div class="stg-pw-wrap">
+                        <input type="password" id="confirmPassword" class="stg-input password-field" placeholder="Confirm new password">
+                        <button type="button" class="stg-pw-toggle pw-toggle" id="confirmPwToggle" aria-label="Toggle password visibility">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <button type="submit" class="stg-btn stg-btn-primary">Update Password</button>
+                </form>
+              </div>
             </div>
 
-            <div class="form-group">
-              <label for="language" class="form-label">Language</label>
-              <select id="language" class="form-select">
-                <option selected>English</option>
-                <option>Spanish</option>
-                <option>French</option>
-                <option>German</option>
-              </select>
+            <!-- ===== Preferences Panel ===== -->
+            <div class="stg-panel" id="panel-preferences">
+              <div class="stg-card">
+                <h3 class="stg-card-title">General Preferences</h3>
+                <p class="stg-card-desc">Customize your experience with timezone and language settings.</p>
+
+                <form id="settings-preferences-form">
+                  <div class="stg-form-grid">
+                    <div class="stg-form-group">
+                      <label for="timezone" class="stg-label">Timezone</label>
+                      <select id="timezone" class="stg-select">
+                        <option>Pacific Time (PT)</option>
+                        <option>Mountain Time (MT)</option>
+                        <option>Central Time (CT)</option>
+                        <option selected>Eastern Time (ET)</option>
+                      </select>
+                    </div>
+                    <div class="stg-form-group">
+                      <label for="language" class="stg-label">Language</label>
+                      <select id="language" class="stg-select">
+                        <option selected>English</option>
+                        <option>Spanish</option>
+                        <option>French</option>
+                        <option>German</option>
+                      </select>
+                    </div>
+                  </div>
+                  <button type="submit" class="stg-btn stg-btn-primary">Save Preferences</button>
+                </form>
+              </div>
             </div>
 
-            <button type="submit" class="btn btn-primary">Save Preferences</button>
-          </form>
-        </div>
+            <!-- ===== Danger Zone Panel ===== -->
+            <div class="stg-panel" id="panel-danger">
+              <div class="stg-danger-zone">
+                <div class="stg-danger-header">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <h3>Danger Zone</h3>
+                </div>
 
-        <!-- Danger Zone -->
-        <div class="settings-section" style="border: 1px solid var(--color-malicious);">
-          <h2 style="color: var(--color-malicious);">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/>
-              <line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-            Danger Zone
-          </h2>
+                <div class="stg-danger-notice">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                  <span>Actions in this section are irreversible. Please proceed with caution and make sure you have backed up any important data before continuing.</span>
+                </div>
 
-          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 1.5rem; background: rgba(255, 77, 77, 0.08); border: 1px solid rgba(255, 77, 77, 0.2); border-radius: var(--radius-md); margin-bottom: 1rem; gap: 1rem;">
-            <div>
-              <h4 style="font-size: 0.9375rem; margin-bottom: 0.25rem; color: white;">Delete Account</h4>
-              <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0;">Permanently delete your account and all data</p>
+                <div class="stg-danger-card">
+                  <div class="stg-danger-row">
+                    <div class="stg-danger-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                    </div>
+                    <div class="stg-danger-info">
+                      <p class="stg-danger-title">Delete Account</p>
+                      <p class="stg-danger-desc">Permanently delete your account, scan history, reports, and all associated data. This action cannot be undone.</p>
+                    </div>
+                    <button class="stg-btn stg-btn-danger" id="deleteAccountBtn">Delete Account</button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <button class="btn btn-danger">Delete Account</button>
+
           </div>
         </div>
       </div>
@@ -261,11 +670,18 @@
 
 <footer>
     <div class="footer-grid">
-      <div class="footer-section">
-        <h4>Quick URL Scan</h4>
-        <div class="footer-quick-check">
-          <input type="text" placeholder="Enter URL " class="form-input">
-          <button class="btn btn-primary btn-sm">Quick Check</button>
+      <div class="footer-section footer-brand">
+        <h3 class="footer-brand-title">PhishNet</h3>
+        <p class="footer-brand-desc">Scan URLs and emails for phishing threats, malware, and security risks in real-time</p>
+        <div class="footer-cta-row">
+          <a href="index.html#quick-scan" class="footer-cta-btn" data-scan-type="url">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Scan URL
+          </a>
+          <a href="index.html#quick-scan" class="footer-cta-btn" data-scan-type="email">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            Check Email
+          </a>
         </div>
       </div>
 
@@ -274,40 +690,71 @@
         <ul>
           <li><a href="dashboard.html">Email/URL Scan</a></li>
           <li><a href="dashboard.html">Dashboard</a></li>
+          <li><a href="reports.html">Reports</a></li>
           <li><a href="pricing.html">Pricing</a></li>
+          <li><a href="blog.html">Blog</a></li>
         </ul>
       </div>
 
       <div class="footer-section">
-        <h4>About</h4>
+        <h4>Information</h4>
         <ul>
-          <li><a href="terms.html">Terms & Services</a></li>
-          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="about.html">About Us</a></li>
           <li><a href="faq.html">FAQs</a></li>
-          <li><a href="about.html">Features</a></li>
-          <li><a href="blog.html">Blog</a></li>
+          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="terms.html">Terms of Service</a></li>
+          <li><a href="demo.html">Demos</a></li>
         </ul>
       </div>
 
       <div class="footer-section">
         <h4>Connect With Us</h4>
         <div class="footer-socials">
-          <a href="#" aria-label="Instagram"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
+          <a href="#" aria-label="Twitter/X"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
           <a href="#" aria-label="Facebook"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>
-          <a href="#" aria-label="Twitter"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
-          <a href="#" aria-label="GitHub"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg></a>
           <a href="#" aria-label="LinkedIn"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a>
+          <a href="#" aria-label="GitHub"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg></a>
+          <a href="#" aria-label="Instagram"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
         </div>
       </div>
     </div>
 
     <div class="footer-copyright">
-      © 2025 PhishNet. All rights reserved.
+      <div class="footer-copyright-line"></div>
+      &copy; 2026 PhishNet. All rights reserved.
     </div>
   </footer>
   <script src="config.js"></script>
   <script src="app.js"></script>
   <script src="settings.js"></script>
+  <script>
+    // Settings tab navigation
+    (function() {
+      const navItems = document.querySelectorAll('.stg-nav-item[data-panel]');
+      const panels = document.querySelectorAll('.stg-panel');
+
+      function switchPanel(panelId) {
+        navItems.forEach(n => n.classList.remove('active'));
+        panels.forEach(p => p.classList.remove('active'));
+        const activeNav = document.querySelector(`.stg-nav-item[data-panel="${panelId}"]`);
+        const activePanel = document.getElementById(`panel-${panelId}`);
+        if (activeNav) activeNav.classList.add('active');
+        if (activePanel) activePanel.classList.add('active');
+        // Save active tab
+        try { sessionStorage.setItem('stg-active-tab', panelId); } catch(e) {}
+      }
+
+      navItems.forEach(item => {
+        item.addEventListener('click', () => switchPanel(item.dataset.panel));
+      });
+
+      // Restore last active tab
+      try {
+        const saved = sessionStorage.getItem('stg-active-tab');
+        if (saved && document.getElementById(`panel-${saved}`)) switchPanel(saved);
+      } catch(e) {}
+    })();
+  </script>
 
   <!-- PhishNet Chatbot Widget -->
   <div id="chatbot-container">

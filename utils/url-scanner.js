@@ -905,29 +905,24 @@ class URLScanner {
       safetyIndicators.push(...results.checks.structure.positives);
     }
 
-    // Domain analysis - skip adding issues for whitelisted domains
+    // Domain analysis — evaluate ALL domains (trusted domain reduction applied later)
     if (results.checks.domain) {
-      if (!isWhitelisted) {
-        if (results.checks.domain.trustScore < 50) {
-          score += 30;
-          riskFactors.push('Low domain trust score');
-        }
-        riskFactors.push(...(results.checks.domain.issues || []));
+      if (results.checks.domain.trustScore < 50) {
+        score += 30;
+        riskFactors.push('Low domain trust score');
       }
+      riskFactors.push(...(results.checks.domain.issues || []));
       if (results.checks.domain.trustScore >= 70) {
         safetyIndicators.push('High domain trust score');
       }
       safetyIndicators.push(...(results.checks.domain.positives || []));
     }
 
-    // SSL check
+    // SSL check — evaluate ALL domains (trusted domain reduction applied later)
     if (results.checks.ssl) {
       if (!results.checks.ssl.secure) {
-        // Don't penalize whitelisted domains for SSL if using HTTP
-        if (!isWhitelisted) {
-          score += 25;
-          riskFactors.push(results.checks.ssl.issue || 'SSL issue');
-        }
+        score += 25;
+        riskFactors.push(results.checks.ssl.issue || 'SSL issue');
       } else {
         if (results.checks.ssl.selfSigned) {
           score += 15;
@@ -1038,18 +1033,30 @@ class URLScanner {
       results.isPhishing = false;
     }
 
-    // For whitelisted domains, add safety indicator and filter misleading risk factors
+    // For whitelisted domains, apply risk reduction factor (NOT absolute override)
+    // This prevents exploitation via compromised legitimate domains:
+    // a domain that starts hosting phishing will still be flagged.
     if (isWhitelisted) {
-      safetyIndicators.push('Trusted domain (whitelisted)');
-      // Filter out DNS-related issues that aren't meaningful for trusted domains
-      const filteredRiskFactors = riskFactors.filter(f => 
-        !f.includes('No SPF') && 
-        !f.includes('No DMARC') && 
-        !f.includes('No MX') &&
-        !f.includes('whitelisted') &&
-        !f.includes('Low domain trust')
-      );
-      results.riskFactors = [...new Set(filteredRiskFactors)];
+      const TRUST_MULTIPLIER = 0.15;
+      const originalScore = results.riskScore;
+      results.riskScore = Math.round(results.riskScore * TRUST_MULTIPLIER);
+      safetyIndicators.push(`Trusted domain (risk reduced ×${TRUST_MULTIPLIER})`);
+      // Re-classify based on reduced score
+      if (results.riskScore >= 70) {
+        results.riskLevel = 'critical';
+        results.isPhishing = true;
+      } else if (results.riskScore >= 50) {
+        results.riskLevel = 'high';
+        results.isPhishing = true;
+      } else if (results.riskScore >= 30) {
+        results.riskLevel = 'medium';
+        results.isPhishing = false;
+      } else {
+        results.riskLevel = 'low';
+        results.isPhishing = false;
+      }
+      // Keep risk factors — they provide visibility even if score is low
+      results.riskFactors = [...new Set(riskFactors)];
     } else {
       results.riskFactors = [...new Set(riskFactors)]; // Remove duplicates
     }
@@ -1062,32 +1069,29 @@ class URLScanner {
    */
   isWhitelistedDomain(hostname, domain) {
     const trustedDomains = [
-      'google.com', 'www.google.com', 'accounts.google.com', 'mail.google.com',
-      'facebook.com', 'www.facebook.com',
-      'amazon.com', 'www.amazon.com',
-      'apple.com', 'www.apple.com', 'icloud.com',
-      'microsoft.com', 'www.microsoft.com', 'outlook.com', 'office.com', 'live.com',
-      'paypal.com', 'www.paypal.com',
-      'netflix.com', 'www.netflix.com',
-      'twitter.com', 'x.com',
-      'instagram.com', 'www.instagram.com',
-      'linkedin.com', 'www.linkedin.com',
-      'github.com', 'www.github.com',
-      'stackoverflow.com', 'www.stackoverflow.com',
-      'youtube.com', 'www.youtube.com',
-      'wikipedia.org', 'en.wikipedia.org',
-      'reddit.com', 'www.reddit.com',
-      'yahoo.com', 'www.yahoo.com',
-      'bing.com', 'www.bing.com',
-      'dropbox.com', 'www.dropbox.com'
+      'google.com', 'facebook.com', 'amazon.com', 'apple.com',
+      'microsoft.com', 'paypal.com', 'netflix.com', 'twitter.com', 'x.com',
+      'instagram.com', 'linkedin.com', 'github.com', 'stackoverflow.com',
+      'youtube.com', 'wikipedia.org', 'reddit.com', 'yahoo.com', 'bing.com',
+      'dropbox.com', 'icloud.com', 'outlook.com', 'office.com', 'live.com',
+      'whatsapp.com', 'telegram.org', 'discord.com', 'spotify.com',
+      'twitch.tv', 'zoom.us', 'slack.com', 'notion.so', 'figma.com', 'canva.com',
+      'cloudflare.com', 'amazonaws.com', 'azure.com', 'heroku.com',
+      'vercel.app', 'netlify.app', 'npmjs.com', 'golang.org', 'python.org',
+      'mozilla.org', 'w3.org', 'steampowered.com', 'ebay.com', 'walmart.com',
+      'target.com', 'bestbuy.com', 'chase.com', 'wellsfargo.com',
+      'bankofamerica.com', 'citi.com', 'adobe.com', 'salesforce.com',
+      'oracle.com', 'ibm.com', 'replit.com'
     ];
     
-    const hostnameClean = (hostname || '').toLowerCase();
-    const domainClean = (domain || '').toLowerCase();
+    // Strip www. prefix for matching
+    const hostnameClean = (hostname || '').toLowerCase().replace(/^www\./, '');
+    const domainClean = (domain || '').toLowerCase().replace(/^www\./, '');
     
-    return trustedDomains.includes(hostnameClean) || 
-           trustedDomains.includes(domainClean) ||
-           trustedDomains.some(td => hostnameClean.endsWith(`.${td}`) || domainClean === td);
+    return trustedDomains.some(td => 
+      hostnameClean === td || domainClean === td ||
+      hostnameClean.endsWith('.' + td) || domainClean.endsWith('.' + td)
+    );
   }
 }
 

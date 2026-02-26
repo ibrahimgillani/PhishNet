@@ -34,7 +34,8 @@ class DashboardDataLoader {
     
     while (waited < maxWait) {
       // Check if ScanningSystem has loaded scan history (window.scanSystem)
-      if (window.scanSystem && window.scanSystem.scanHistory && window.scanSystem.scanHistory.length >= 0) {
+      // Use _historyLoaded flag to ensure loadScanHistory() has completed (not just initialized to [])
+      if (window.scanSystem && window.scanSystem.scanHistory && (window.scanSystem._historyLoaded || window.scanSystem.scanHistory.length > 0)) {
         this.scanHistory = window.scanSystem.scanHistory;
         console.log('[DashboardData] Using data from scanSystem:', this.scanHistory.length, 'scans');
         return;
@@ -157,9 +158,11 @@ class DashboardDataLoader {
     
     if (threats.length === 0) {
       alertsContainer.innerHTML = `
-        <div class="alert-item-enhanced" style="text-align: center; padding: 2rem;">
-          <p style="color: #00FF88;">✓ No threats detected</p>
-          <p style="color: #888; font-size: 0.875rem;">Your scans are all clean!</p>
+        <div class="dash-alert-item" style="text-align: center; padding: 1.5rem; justify-content: center;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:0.3rem;">
+            <span style="color: #00FF88; font-size: 0.85rem; font-weight: 600;">✓ No threats detected</span>
+            <span style="color: var(--text-muted); font-size: 0.78rem;">Your scans are all clean!</span>
+          </div>
         </div>
       `;
       return;
@@ -171,11 +174,9 @@ class DashboardDataLoader {
   createAlertHTML(item) {
     const threat = (item.threat || '').toLowerCase();
     const isMalicious = threat === 'malicious' || threat === 'phishing' || item.isSafe === false;
-    const iconSvg = isMalicious 
-      ? '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
-      : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
     
-    const badgeClass = isMalicious ? 'alert-type-malicious' : 'alert-type-suspicious';
+    const dotColor = isMalicious ? '#FF4D4D' : '#FFC107';
+    const badgeClass = isMalicious ? 'dash-badge-malicious' : 'dash-badge-suspicious';
     const badgeText = isMalicious ? 'Malicious' : 'Suspicious';
     const itemType = item.type || (item.value && item.value.includes('@') ? 'email' : 'url');
     const title = itemType === 'email' ? 'Phishing Email Detected' : 'Suspicious URL Blocked';
@@ -188,18 +189,14 @@ class DashboardDataLoader {
     const timeAgo = this.getTimeAgo(timestamp);
     
     return `
-      <div class="alert-item-enhanced">
-        <div class="alert-item-header">
-          <div class="alert-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              ${iconSvg}
-            </svg>
-          </div>
-          <div class="alert-content">
-            <h4 class="alert-title">${title}</h4>
-            <p class="alert-description">${description}</p>
-            <span class="alert-type-badge ${badgeClass}">${badgeText}</span>
-            <p class="alert-time">${timeAgo}</p>
+      <div class="dash-alert-item">
+        <div class="dash-alert-dot" style="background: ${dotColor};"></div>
+        <div class="dash-alert-body">
+          <span class="dash-alert-title">${title}</span>
+          <span class="dash-alert-desc">${description}</span>
+          <div class="dash-alert-meta">
+            <span class="dash-alert-badge ${badgeClass}">${badgeText}</span>
+            <span class="dash-alert-time">${timeAgo}</span>
           </div>
         </div>
       </div>
@@ -229,27 +226,60 @@ class DashboardDataLoader {
     }
     
     // Fallback if ScanningSystem is not available
-    const tbody = document.querySelector('#scan-results-table tbody');
-    if (!tbody) return;
+    const listEl = document.getElementById('scan-results-list');
+    if (!listEl) return;
     
-    const recentScans = this.scanHistory.slice(0, 10);
+    const PAGE_SIZE = 6;
+    if (typeof this._scanPageVisible === 'undefined') this._scanPageVisible = PAGE_SIZE;
     
-    if (recentScans.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="6" style="text-align: center; padding: 2rem; color: #888;">
-            No scans yet. Scan a URL or email to see results here.
-          </td>
-        </tr>
+    const countEl = document.getElementById('scan-count');
+    if (countEl) countEl.textContent = `${this.scanHistory.length} scan${this.scanHistory.length !== 1 ? 's' : ''}`;
+    
+    if (this.scanHistory.length === 0) {
+      listEl.innerHTML = `
+        <div class="dash-scan-empty">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.3"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <p>No scans yet. Scan a URL or email to see results here.</p>
+        </div>
       `;
       return;
     }
     
-    tbody.innerHTML = recentScans.map(scan => this.createTableRowHTML(scan)).join('');
-    console.log('[DashboardData] Table updated with', recentScans.length, 'recent scans');
+    const visible = this.scanHistory.slice(0, this._scanPageVisible);
+    const remaining = this.scanHistory.length - visible.length;
+    
+    listEl.innerHTML = visible.map(scan => this.createScanCardHTML(scan)).join('');
+    
+    // Show More / Show Less footer
+    if (this.scanHistory.length > PAGE_SIZE) {
+      const showingText = remaining > 0
+        ? `Showing ${visible.length} of ${this.scanHistory.length}`
+        : `Showing all ${this.scanHistory.length} scans`;
+      const showMoreBtn = remaining > 0
+        ? `<button class="dash-scan-show-more" id="dash-scan-more">Show More (${Math.min(PAGE_SIZE, remaining)})</button>`
+        : '';
+      const showLessBtn = this._scanPageVisible > PAGE_SIZE
+        ? `<button class="dash-scan-show-more" id="dash-scan-less">Show Less</button>`
+        : '';
+      listEl.insertAdjacentHTML('beforeend', `
+        <div class="dash-scan-footer">
+          <span class="dash-scan-showing">${showingText}</span>
+          <div class="dash-scan-footer-btns">${showMoreBtn}${showLessBtn}</div>
+        </div>`);
+      document.getElementById('dash-scan-more')?.addEventListener('click', () => {
+        this._scanPageVisible += PAGE_SIZE;
+        this.updateScanHistoryUI();
+      });
+      document.getElementById('dash-scan-less')?.addEventListener('click', () => {
+        this._scanPageVisible = PAGE_SIZE;
+        this.updateScanHistoryUI();
+      });
+    }
+    
+    console.log('[DashboardData] Scan list updated with', visible.length, 'of', this.scanHistory.length, 'scans');
   }
 
-  createTableRowHTML(scan) {
+  createScanCardHTML(scan) {
     const threatColors = {
       safe: '#00FF88',
       legitimate: '#00FF88',
@@ -266,13 +296,21 @@ class DashboardDataLoader {
       phishing: 'Phishing'
     };
     
+    const threatClasses = {
+      safe: 'safe',
+      legitimate: 'safe',
+      suspicious: 'suspicious',
+      malicious: 'malicious',
+      phishing: 'malicious'
+    };
+    
     const threat = (scan.threat || 'unknown').toLowerCase();
     const color = threatColors[threat] || (scan.isSafe === true ? '#00FF88' : scan.isSafe === false ? '#FF4D4D' : '#888');
     const label = threatLabels[threat] || (scan.isSafe === true ? 'Safe' : scan.isSafe === false ? 'Malicious' : threat);
+    const cls = threatClasses[threat] || (scan.isSafe === true ? 'safe' : scan.isSafe === false ? 'malicious' : '');
     
-    const confidence = typeof scan.confidence === 'number' 
-      ? `${scan.confidence.toFixed(1)}%` 
-      : scan.confidence || 'N/A';
+    const confNum = typeof scan.confidence === 'number' ? scan.confidence : parseFloat(scan.confidence) || 0;
+    const confStr = confNum > 0 ? `${confNum.toFixed(0)}%` : 'N/A';
     
     const timestamp = scan.timestamp || Date.now();
     const date = new Date(timestamp);
@@ -284,26 +322,36 @@ class DashboardDataLoader {
     });
     
     const scanValue = scan.value || scan.url || '';
-    const displayValue = scanValue.length > 40 
-      ? scanValue.substring(0, 40) + '...' 
+    const displayValue = scanValue.length > 50 
+      ? scanValue.substring(0, 50) + '…' 
       : scanValue;
     
     const scanType = scan.type || (scanValue.includes('@') ? 'email' : 'url');
+    const typeIcon = scanType === 'email'
+      ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>'
+      : '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
     const scanId = scan.id || scan._id || scanValue;
     
     return `
-      <tr>
-        <td title="${scanValue}">${displayValue}</td>
-        <td>${scanType === 'email' ? 'Email' : 'URL'}</td>
-        <td><span style="color: ${color}; font-weight: 600;">${label}</span></td>
-        <td>${confidence}</td>
-        <td>${timeStr}</td>
-        <td>
-          <button class="btn btn-sm btn-secondary" onclick="dashboardData.viewScanDetails('${scanId}')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
-            View
-          </button>
-        </td>
-      </tr>
+      <div class="dash-scan-card" onclick="dashboardData.viewScanDetails('${scanId.replace(/'/g, "\\'")}')">
+        <div class="dash-scan-status dash-scan-${cls}">
+          <span class="dash-scan-dot" style="background:${color}"></span>
+        </div>
+        <div class="dash-scan-info">
+          <div class="dash-scan-target" title="${scanValue}">${displayValue}</div>
+          <div class="dash-scan-meta-row">
+            <span class="dash-scan-type">${typeIcon} ${scanType === 'email' ? 'Email' : 'URL'}</span>
+            <span class="dash-scan-time">${timeStr}</span>
+          </div>
+        </div>
+        <div class="dash-scan-result">
+          <span class="dash-scan-badge dash-scan-badge-${cls}">${label}</span>
+          <div class="dash-scan-conf">
+            <div class="dash-scan-conf-bar"><div class="dash-scan-conf-fill" style="width:${confNum}%;background:${color}"></div></div>
+            <span class="dash-scan-conf-text">${confStr}</span>
+          </div>
+        </div>
+      </div>
     `;
   }
 

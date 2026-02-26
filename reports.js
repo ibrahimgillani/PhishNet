@@ -22,55 +22,48 @@ class ReportsManager {
       await this.loadScanHistory();
       console.log('[ReportsManager] loadScanHistory complete, scanHistory.length =', this.scanHistory.length);
 
-      // If a specific scan was selected from another page, prefer it (it may contain richer details)
-      try {
-        const stored = localStorage.getItem('selectedScan');
-        const storedId = localStorage.getItem('selectedScanId');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed && parsed.id) {
-            // Prefer server-backed record when available to ensure full details are shown
-            let match = this.scanHistory.find(s => String(s.id) === String(parsed.id));
+      // Default to latest scan
+      this.currentReport = this.scanHistory[0] || null;
 
-            // If no exact id match, try matching by value and timestamp proximity (within 60s)
-            if (!match && parsed.value) {
-              const parsedTs = Number(parsed.timestamp) || 0;
-              match = this.scanHistory.find(s => {
-                try {
-                  const sameValue = String(s.value || '').toLowerCase() === String(parsed.value || '').toLowerCase();
-                  const sTs = Number(s.timestamp) || 0;
-                  const closeTime = parsedTs && sTs && Math.abs(sTs - parsedTs) < 60000; // 60s
-                  return sameValue && (parsedTs ? closeTime : true);
-                } catch (err) {
-                  return false;
-                }
-              });
-            }
-
-            if (match) {
-              this.currentReport = match;
-            } else {
-              // No server match: fall back to latest server record (do not inject incomplete local object)
-              this.currentReport = this.scanHistory[0];
-              console.warn('[ReportsManager] selectedScan present but no matching server record found; using latest server record instead');
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to parse selectedScan from localStorage', e);
-      }
-
-      // If no match from the stored object, also respect URL param `scanId` (legacy) or `id`
+      // Only use stored selectedScan if it was set during THIS page navigation
+      // (i.e. user clicked "View Report" from scan results and was redirected here)
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const urlScanId = urlParams.get('scanId') || urlParams.get('id');
-        const storedIdFallback = localStorage.getItem('selectedScanId') || urlScanId;
-        if (!this.currentReport && storedIdFallback) {
-          const byId = this.scanHistory.find(s => String(s.id) === String(storedIdFallback));
+        
+        if (urlScanId) {
+          // Explicit URL param — find matching scan
+          const byId = this.scanHistory.find(s => String(s.id) === String(urlScanId));
           if (byId) this.currentReport = byId;
+        } else {
+          // Check localStorage selectedScan only if it was set recently (within last 10 seconds)
+          const stored = localStorage.getItem('selectedScan');
+          const storedTime = Number(localStorage.getItem('selectedScanTime')) || 0;
+          const isRecent = (Date.now() - storedTime) < 10000; // 10s window
+
+          if (stored && isRecent) {
+            const parsed = JSON.parse(stored);
+            if (parsed && parsed.id) {
+              let match = this.scanHistory.find(s => String(s.id) === String(parsed.id));
+              if (!match && parsed.value) {
+                const parsedTs = Number(parsed.timestamp) || 0;
+                match = this.scanHistory.find(s => {
+                  const sameValue = String(s.value || '').toLowerCase() === String(parsed.value || '').toLowerCase();
+                  const sTs = Number(s.timestamp) || 0;
+                  return sameValue && (!parsedTs || !sTs || Math.abs(sTs - parsedTs) < 60000);
+                });
+              }
+              if (match) this.currentReport = match;
+            }
+          }
+
+          // Clear stale selectedScan data to prevent it from affecting future visits
+          localStorage.removeItem('selectedScan');
+          localStorage.removeItem('selectedScanId');
+          localStorage.removeItem('selectedScanTime');
         }
       } catch (e) {
-        // ignore
+        console.warn('Failed to parse selectedScan from localStorage', e);
       }
 
       this.renderReports();
@@ -210,79 +203,82 @@ class ReportsManager {
    */
   transformHistoryData(historyItems) {
     return historyItems.map(item => {
-      const analysis = item.analysis || {};
-      let indicators = item.indicators || analysis.indicators || item.meta?.indicators || [];
+      // URLCheckHistory schema: url, status(safe/unsafe/phishing/threat/unknown),
+      // reasons[], threatScore, confidence, domain, timestamp, createdAt, wasWarned, userAction
+
+      // --- Date: prefer timestamp > createdAt > updatedAt ---
+      const dateSource = item.timestamp || item.createdAt || item.checkedAt || item.updatedAt;
+      const dateObj = dateSource ? new Date(dateSource) : null;
+      const dateStr = dateObj ? dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+      const timeStr = dateObj ? dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+
+      // --- Threat level from status field ---
+      const rawStatus = String(item.status || 'unknown').toLowerCase();
+      let threat = 'safe';
+      if (['unsafe', 'phishing', 'threat'].includes(rawStatus)) {
+        threat = rawStatus === 'unsafe' ? 'suspicious' : 'malicious';
+      } else if (rawStatus === 'unknown') {
+        threat = 'safe';
+      }
+      // Override with explicit threatLevel if provided
+      if (item.threatLevel) {
+        const tl = String(item.threatLevel).toLowerCase();
+        if (['safe', 'low'].includes(tl)) threat = 'safe';
+        else if (['suspicious', 'medium'].includes(tl)) threat = 'suspicious';
+        else if (['malicious', 'high', 'critical', 'phishing', 'danger'].includes(tl)) threat = 'malicious';
+      }
+      // Also use threatScore as signal
+      const tScore = typeof item.threatScore === 'number' ? item.threatScore : 0;
+      if (tScore >= 70) threat = 'malicious';
+      else if (tScore >= 40 && threat === 'safe') threat = 'suspicious';
+
+      // --- Risk level from threatScore ---
+      let riskLevel = 'Low';
+      if (tScore >= 70) riskLevel = 'High';
+      else if (tScore >= 40) riskLevel = 'Medium';
+
+      // --- Confidence ---
+      const confidence = (typeof item.confidence === 'number' && item.confidence > 0) ? item.confidence : (typeof item.threatScore === 'number' && item.threatScore > 0 ? (threat === 'safe' ? Math.max(0, 100 - item.threatScore) : Math.min(100, Math.max(item.threatScore, 50))) : (threat === 'safe' ? 95 : threat === 'malicious' ? 85 : 70));
+
+      // --- Indicators from reasons[] ---
+      let indicators = item.reasons || item.indicators || [];
       if (!Array.isArray(indicators)) indicators = [];
       indicators = indicators
         .map(i => this.sanitizeValue(i))
         .filter(i => i !== null)
-        .map(i => String(i).replace(/^[^a-zA-Z0-9]+/g, '').trim());
+        .map(i => String(i).replace(/^[^a-zA-Z0-9]+/g, '').trim())
+        .filter(i => i.length > 0);
 
-      let issues = item.issues || analysis.issues || item.meta?.issues || [];
+      // --- Issues (alias) ---
+      let issues = item.issues || [];
       if (!Array.isArray(issues)) issues = [];
-      issues = issues
-        .map(i => this.sanitizeValue(i))
-        .filter(i => i !== null)
-        .map(i => String(i).replace(/^[^a-zA-Z0-9]+/g, '').trim());
-
-      const summary = this.sanitizeValue(item.summary) || this.sanitizeValue(analysis.summary) || '';
-      const confidence = (typeof item.confidence !== 'undefined') ? item.confidence : (analysis.confidence || 95);
+      // If no explicit issues but we have reasons for unsafe, use them as issues too
+      if (issues.length === 0 && indicators.length > 0 && threat !== 'safe') {
+        issues = [...indicators];
+      }
 
       const reportData = {
         id: item._id,
         type: item.scanType === 'email' || (item.senderEmail || '').includes('@') ? 'email' : 'url',
         value: item.url || item.value || '',
         senderEmail: item.senderEmail || null,
-        threat: (() => {
-          // Priority: explicit threatLevel/threat field > isSafe flag
-          const rawThreat = item.threatLevel || item.threat;
-          
-          // If we have an explicit threat level, use it
-          if (rawThreat) {
-            const normalized = String(rawThreat).toLowerCase();
-            if (['safe', 'low'].includes(normalized)) return 'safe';
-            if (['suspicious', 'medium'].includes(normalized)) return 'suspicious';
-            if (['malicious', 'high', 'critical', 'phishing', 'danger'].includes(normalized)) return 'malicious';
-          }
-          
-          // Check isSafe flag - if explicitly false, it's malicious
-          if (item.isSafe === false) return 'malicious';
-          if (item.isSafe === true) return 'safe';
-          
-          // Check threatType for additional context
-          if (item.threatType) {
-            const threatType = String(item.threatType).toLowerCase();
-            if (threatType.includes('phishing') || threatType.includes('malware') || threatType.includes('malicious')) {
-              return 'malicious';
-            }
-          }
-          
-          // Default to safe only if no threat indicators
-          return 'safe';
-        })(),
+        threat: threat,
         threatType: item.threatType || null,
         confidence: confidence,
-        riskLevel: (() => {
-          // Derive risk level from threat indicators
-          const rawThreat = item.threatLevel || item.threat;
-          if (rawThreat) {
-            const normalized = String(rawThreat).toLowerCase();
-            if (['high', 'critical', 'malicious', 'phishing'].includes(normalized)) return 'High';
-            if (['medium', 'suspicious'].includes(normalized)) return 'Medium';
-          }
-          if (item.isSafe === false) return 'High';
-          return item.riskLevel || 'Low';
-        })(),
-        timestamp: item.checkedAt ? new Date(item.checkedAt).getTime() : Date.now(),
-        date: item.checkedAt ? new Date(item.checkedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '',
-        time: item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '',
+        riskLevel: riskLevel,
+        threatScore: tScore,
+        timestamp: dateObj ? dateObj.getTime() : Date.now(),
+        date: dateStr,
+        time: timeStr,
         indicators: indicators,
         issues: issues,
         rawThreats: item.threatCategories || [],
         domain: item.domain || null,
-        isSafe: item.isSafe || false
+        isSafe: rawStatus === 'safe',
+        wasWarned: item.wasWarned || false
       };
 
+      const summary = this.sanitizeValue(item.summary) || '';
       reportData.summary = summary || this.generateProfessionalSummary(reportData);
       return reportData;
     });
@@ -320,8 +316,27 @@ class ReportsManager {
         if (response.ok) {
           const data = await response.json();
           if (data.success) {
-            this.scanHistory = this.transformHistoryData(data.data.history);
-            console.log('[ReportsManager] Loaded history via fallback:', this.scanHistory.length, 'records');
+            const serverItems = this.transformHistoryData(data.data.history);
+            // Merge local scans
+            let localStored = [];
+            try { localStored = JSON.parse(localStorage.getItem('scanHistory')) || []; } catch (e) { localStored = []; }
+            const remainingLocal = localStored.filter(local => {
+              if (!local || !local.value) return false;
+              const localTs = Number(local.timestamp) || 0;
+              const localIsEmail = String(local.type || '').toLowerCase().includes('email');
+              return !serverItems.some(srv => {
+                const srvTs = Number(srv.timestamp) || 0;
+                if (localIsEmail && String(srv.type || '').toLowerCase().includes('email')) {
+                  const localSender = local.senderEmail || '';
+                  const srvSender = srv.senderEmail || srv.value || '';
+                  if (localSender && srvSender && localSender.toLowerCase() === srvSender.toLowerCase() && Math.abs(srvTs - localTs) < 30000) return true;
+                }
+                return String((srv.value || '').trim()).slice(0, 200) === String((local.value || '').trim()).slice(0, 200)
+                  && Math.abs(srvTs - localTs) < 5000;
+              });
+            });
+            this.scanHistory = [...serverItems, ...remainingLocal];
+            console.log('[ReportsManager] Loaded history via fallback:', serverItems.length, 'server +', remainingLocal.length, 'local');
           }
         }
         return;
@@ -344,11 +359,36 @@ class ReportsManager {
         console.log('[ReportsManager] API response:', data.success, 'history count:', data.data?.history?.length || 0);
         if (data.success && data.data && data.data.history) {
           // Transform API data to match frontend format
-          this.scanHistory = this.transformHistoryData(data.data.history);
-          console.log(`[ReportsManager] Loaded ${this.scanHistory.length} scans from server`);
+          const serverItems = this.transformHistoryData(data.data.history);
+
+          // Merge with local-only scans (e.g. email scans saved locally when server save failed)
+          let localStored = [];
+          try {
+            localStored = JSON.parse(localStorage.getItem('scanHistory')) || [];
+          } catch (e) { localStored = []; }
+
+          const remainingLocal = localStored.filter(local => {
+            if (!local || !local.value) return false;
+            const localTs = Number(local.timestamp) || 0;
+            const localIsEmail = String(local.type || '').toLowerCase().includes('email');
+            return !serverItems.some(srv => {
+              const srvTs = Number(srv.timestamp) || 0;
+              if (localIsEmail && String(srv.type || '').toLowerCase().includes('email')) {
+                const localSender = local.senderEmail || '';
+                const srvSender = srv.senderEmail || srv.value || '';
+                if (localSender && srvSender && localSender.toLowerCase() === srvSender.toLowerCase() && Math.abs(srvTs - localTs) < 30000) return true;
+              }
+              return String((srv.value || '').trim()).slice(0, 200) === String((local.value || '').trim()).slice(0, 200)
+                && Math.abs(srvTs - localTs) < 5000;
+            });
+          });
+
+          this.scanHistory = [...serverItems, ...remainingLocal];
+          console.log(`[ReportsManager] Loaded ${serverItems.length} server + ${remainingLocal.length} local scans`);
         } else {
           console.error('[ReportsManager] Failed to load scan history:', data.message);
-          this.scanHistory = [];
+          // Fallback to localStorage
+          try { this.scanHistory = JSON.parse(localStorage.getItem('scanHistory')) || []; } catch (e) { this.scanHistory = []; }
         }
       } else {
         if (response.status === 401) {
@@ -362,11 +402,13 @@ class ReportsManager {
           return;
         }
         console.error('[ReportsManager] Failed to fetch scan history:', response.status);
-        this.scanHistory = [];
+        // Fallback to localStorage
+        try { this.scanHistory = JSON.parse(localStorage.getItem('scanHistory')) || []; } catch (e) { this.scanHistory = []; }
       }
     } catch (error) {
       console.error('[ReportsManager] Error loading scan history:', error);
-      this.scanHistory = [];
+      // Fallback to localStorage
+      try { this.scanHistory = JSON.parse(localStorage.getItem('scanHistory')) || []; } catch (e) { this.scanHistory = []; }
     }
   }
 
@@ -381,7 +423,7 @@ class ReportsManager {
     if (this.scanHistory.length === 0) {
       // Show empty state
       mainReport.innerHTML = `
-        <div class="empty-state">
+        <div class="rpt-empty">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="12" y1="8" x2="12" y2="12"></line>
@@ -403,54 +445,29 @@ class ReportsManager {
     mainReport.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Loading report...</div>';
 
     // Render main report
-    // TRACE: main report render
     try { console.log('[ReportsManager][TRACE] renderMainReport', { reportId: this.currentReport && (this.currentReport.id || this.currentReport._id || '(no-id)'), isEmailType: String(this.currentReport.type||'').toLowerCase().includes('email'), displayTarget: this.getDisplayTarget(this.currentReport), valueLength: this.currentReport && this.currentReport.value ? String(this.currentReport.value).length : 0 }); } catch (e) {}
     this.renderMainReport(this.currentReport, mainReport);
 
-    // Render recent scans sidebar (previous 3 unique scans)
+    // Render recent scans sidebar (previous 4 scans)
     const recentCandidates = this.scanHistory.slice(1);
     const extractEmail = (text) => {
       if (!text) return '';
       try {
         let s = String(text).trim();
-        // remove common prefixes like "from:", "sender:", etc.
         s = s.replace(/^(from|sender|reply[-\s]?to)\s*[:\-]\s*/i, '');
-        // also remove leading 'from' without colon when it's followed immediately by an email
         s = s.replace(/^from\s+/i, '');
         const m = s.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
         if (m) return m[0];
-        // tolerant match when whitespace may have been inserted into email tokens
         const m2 = s.match(/([A-Z0-9._%+-]+)\s*@\s*([A-Z0-9.-]+)\s*\.\s*([A-Z]{2,})/i);
         if (m2) return (m2[1] + '@' + m2[2] + '.' + m2[3]).replace(/\s+/g, '');
         return '';
       } catch (e) { return ''; }
     };
 
-    const normalizeRecentKey = (scan) => {
-      try {
-        const typeStr = String(scan.type || '').toLowerCase();
-        const cleanedFromSender = extractEmail(scan.senderEmail) || '';
-        const cleanedFromValue = extractEmail(scan.value) || '';
-        const isEmail = typeStr.includes('email') || cleanedFromSender !== '' || cleanedFromValue !== '';
-        if (isEmail) {
-          const emailTarget = (cleanedFromSender || cleanedFromValue || '').trim().toLowerCase();
-          if (emailTarget) return `email::${emailTarget}`;
-          if (scan.id || scan._id) return `email::${scan.id || scan._id}`;
-          return null;
-        }
-        const rawTarget = String(this.getDisplayTarget ? this.getDisplayTarget(scan) : (scan.value || scan.url || '')).trim().toLowerCase();
-        if (!rawTarget) return null;
-        return `url::${rawTarget}`;
-      } catch (e) {
-        return null;
-      }
-    };
-
-    // Show recent 4 scans without deduplication (allow repeated URLs/emails at different times)
+    // Show recent 4 scans
     const recentScans = recentCandidates.slice(0, 4);
 
-    const recentItemsHtml = recentScans.map((scan, index) => {
-      // Determine email-ness by type OR presence of an email address in sender/value
+    const recentItemsHtml = recentScans.map((scan) => {
       const typeStr = String(scan.type || '').toLowerCase();
       const cleanedFromSender = extractEmail(scan.senderEmail) || '';
       const cleanedFromValue = extractEmail(scan.value) || '';
@@ -460,36 +477,37 @@ class ReportsManager {
       let displayValue;
       
       if (isEmail) {
-        // For email: show ONLY the extracted email or placeholder - NEVER call getDisplayTarget
         const emailAddress = cleanedFromSender || cleanedFromValue || '';
         displayValue = this.truncate(emailAddress || PLACEHOLDER_SENDER, 30);
       } else {
-        // For URL: show the URL directly
         displayValue = this.truncate(String(scan.value || scan.url || ''), 30);
       }
       
-      try { console.log('[ReportsManager][TRACE] recent scan', { index, id: scan.id || '(no-id)', isEmail, displayValue, valueLength: scan && scan.value ? String(scan.value).length : 0 }); } catch (e) {}
-      const threatClass = this.getThreatClass(scan.threat);
+      const threat = (scan.threat || '').toLowerCase();
       const isActive = this.currentReport && String(this.currentReport.id) === String(scan.id);
+      const dotColor = threat === 'safe' ? '#00FF88' : threat === 'suspicious' ? '#FFC107' : threat === 'malicious' ? '#FF4D4D' : '#6B7280';
+      const badgeBg = threat === 'safe' ? 'rgba(0,255,136,0.12)' : threat === 'suspicious' ? 'rgba(255,193,7,0.12)' : threat === 'malicious' ? 'rgba(255,77,77,0.12)' : 'rgba(107,114,128,0.12)';
+      const badgeColor = dotColor;
+      const typeLabel = isEmail ? 'EMAIL' : 'URL';
+
       return `
-      <div class="scan-preview ${isActive ? 'active' : ''}" data-scan-id="${scan.id}" style="display:flex; align-items:center; gap:10px;">
-        <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
-          <div style="width:34px; height:34px; display:flex; align-items:center; justify-content:center; border-radius:6px; background:${this.getThreatColor(scan.threat)}; color:#fff; font-weight:700;">${scan.threat === 'safe' ? '✓' : scan.threat === 'suspicious' ? '⚠' : '✕'}</div>
-          <span class="badge ${threatClass}" style="font-size:0.7rem; padding:4px 6px; display:block;">${(scan.threat||'').toUpperCase()}</span>
+        <div class="rpt-scan-item ${isActive ? 'active' : ''}" data-scan-id="${scan.id}">
+          <div class="rpt-scan-dot" style="background:${dotColor}"></div>
+          <div class="rpt-scan-body">
+            <div class="rpt-scan-url">${this.escapeHtml(displayValue)}</div>
+            <div class="rpt-scan-meta">
+              <span>${typeLabel}</span>
+              <span class="rpt-scan-badge" style="background:${badgeBg};color:${badgeColor};">${threat.toUpperCase() || 'UNKNOWN'}</span>
+            </div>
+          </div>
         </div>
-        <div style="display:flex; flex-direction:column;">
-          <div class="scan-preview-title" style="font-size:0.75rem; color:var(--text-muted);">${(scan.type||'').toUpperCase()}</div>
-          <div class="scan-preview-value" style="font-family: monospace; font-size:0.9rem;">${this.escapeHtml(displayValue)}</div>
-        </div>
-      </div>
-    `;
+      `;
     }).join('');
 
-    // Render recent items in a simple list container to avoid nested card visuals
     recentScansList.innerHTML = recentItemsHtml;
 
     // Attach event listeners to preview cards
-    const previewCards = recentScansList.querySelectorAll('.scan-preview');
+    const previewCards = recentScansList.querySelectorAll('.rpt-scan-item');
     previewCards.forEach(card => {
       card.addEventListener('click', (e) => {
         e.preventDefault();
@@ -498,46 +516,27 @@ class ReportsManager {
       });
     });
 
-    // If less than 3 recent scans, show message
+    // If no recent scans, show message
     if (recentScans.length === 0) {
-      recentScansList.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.875rem;">No additional scans</p>';
+      recentScansList.innerHTML = '<p class="rpt-indicator-none">No additional scans</p>';
     }
   }
 
   renderMainReport(report, container) {
     const threatColor = this.getThreatColor(report.threat);
-    const threatClass = this.getThreatClass(report.threat);
-    const statusSymbol = report.threat === 'safe' ? '✓' : report.threat === 'suspicious' ? '⚠' : '✕';
-    const statusColor = this.getThreatColor(report.threat);
-    const statusBg = report.threat === 'safe' ? 'rgba(0,255,136,0.12)' : report.threat === 'suspicious' ? 'rgba(255,193,7,0.12)' : 'rgba(255,77,77,0.12)';
+    const threat = (report.threat || '').toLowerCase();
+    const statusSymbol = threat === 'safe' ? '✓' : threat === 'suspicious' ? '⚠' : '✕';
+    const statusBg = threat === 'safe' ? 'rgba(0,255,136,0.15)' : threat === 'suspicious' ? 'rgba(255,193,7,0.15)' : 'rgba(255,77,77,0.15)';
+    const badgeBg = threat === 'safe' ? 'rgba(0,255,136,0.12)' : threat === 'suspicious' ? 'rgba(255,193,7,0.12)' : 'rgba(255,77,77,0.12)';
 
-    // Ensure hover style for download button without inline handlers
-    if (!document.getElementById('reports-download-btn-style')) {
+    // Ensure dynamic styles
+    if (!document.getElementById('rpt-dynamic-styles')) {
       const styleEl = document.createElement('style');
-      styleEl.id = 'reports-download-btn-style';
+      styleEl.id = 'rpt-dynamic-styles';
       styleEl.textContent = `
-        .download-report-btn:hover { background: #0952b8 !important; }
-        .delete-report-btn:hover { background: #e63946 !important; }
-        @keyframes slideIn {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-        @keyframes slideOut {
-          from {
-            transform: translateX(0);
-            opacity: 1;
-          }
-          to {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-        }
+        .rpt-icon-btn:active { transform: scale(0.95); }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
       `;
       document.head.appendChild(styleEl);
     }
@@ -545,24 +544,19 @@ class ReportsManager {
     const indicatorsArr = report.indicators || [];
     const indicatorsHtml = indicatorsArr.length > 0 ? indicatorsArr.map((indicator) => {
       const indicatorClass = this.getIndicatorType(indicator || '');
-      const color = indicatorClass === 'threat' ? '#FF4D4D' : indicatorClass === 'warning' ? '#FFC107' : '#00FF88';
-      const bg = indicatorClass === 'threat' ? 'rgba(255,77,77,0.08)' : indicatorClass === 'warning' ? 'rgba(255,193,7,0.08)' : 'rgba(0,255,136,0.06)';
-      const icon = indicatorClass === 'threat' ? '✕' : indicatorClass === 'warning' ? '⚠' : '✓';
-
+      const dotColor = indicatorClass === 'threat' ? '#FF4D4D' : indicatorClass === 'warning' ? '#FFC107' : '#00FF88';
       return `
-        <li style="display:flex; gap:0.75rem; align-items:center; padding: 0.75rem; background: ${bg}; border-radius: var(--radius-sm); margin-bottom: 0.75rem;">
-          <div class="indicator-icon" style="min-width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; background: ${color}; color: #ffffff !important; font-weight:700;">${icon}</div>
-          <div style="flex:1;"><strong style="color: white; display: block; margin-bottom: 0.25rem;">${this.escapeHtml(indicator)}</strong></div>
-        </li>
+        <div class="rpt-indicator ${indicatorClass}">
+          <div class="rpt-indicator-dot" style="background:${dotColor}"></div>
+          <span>${this.escapeHtml(indicator)}</span>
+        </div>
       `;
-    }).join('') : '<li style="color: #9CA3AF; padding: 0.5rem 0;">No indicators detected</li>';
+    }).join('') : '<p class="rpt-indicator-none">No indicators detected</p>';
 
     const issuesArr = Array.isArray(report.issues) ? report.issues : [];
     const issuesHtml = issuesArr.length > 0 ? issuesArr.map(issue => `
-      <li style="margin-bottom: 0.75rem; color: white; font-size: 0.875rem;">
-        ${this.escapeHtml(issue)}
-      </li>
-    `).join('') : '<li style="color: #9CA3AF; padding: 0.5rem 0;">No issues detected</li>';
+      <div class="rpt-issue">${this.escapeHtml(issue)}</div>
+    `).join('') : '<p class="rpt-indicator-none">No issues detected</p>';
 
     const extractEmail = (text) => {
       if (!text) return '';
@@ -572,110 +566,100 @@ class ReportsManager {
       } catch (e) { return ''; }
     };
 
-    const senderOnly = (report.type || '').toString().toLowerCase().includes('email') ? (report.senderEmail || extractEmail(report.value) || '') : '';
-
-    const targetInfo = `<p style="font-family: monospace; font-size: 0.875rem; color: white; word-break: break-all; margin: 0;">${this.escapeHtml(this.getDisplayTarget(report))}</p>`;
+    const typeLabel = (report.type || '').toLowerCase() === 'url' ? 'URL' : 'Email';
 
     container.innerHTML = `
-      <div class="card results-card" style="margin-bottom: 2rem;">
-        <div class="card-header">
-          <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
-            <div style="display:flex; align-items:flex-start; gap:1rem; flex: 1;">
-              <div style="flex: 1;">
-                <h2 class="card-title" style="margin: 0;">${report.type === 'url' ? 'URL' : 'Email'} Scan Report</h2>
-                <p style="font-size:0.875rem; color: var(--text-muted); margin: 4px 0 0 0;">${report.type === 'url' ? 'Scanned URL' : 'Scanned Email'}</p>
-                <p style="font-family: monospace; font-size: 0.875rem; color: white; margin: 0; word-break: break-all;">${this.escapeHtml(this.getDisplayTarget(report))}</p>
-              </div>
+      <div class="rpt-card">
+        <!-- Hero -->
+        <div class="rpt-hero">
+          <div class="rpt-hero-info">
+            <div class="rpt-hero-label">${typeLabel} Scan Report</div>
+            <h2 class="rpt-hero-title">${typeLabel} Analysis</h2>
+            <div class="rpt-hero-target">${this.escapeHtml(this.getDisplayTarget(report))}</div>
+          </div>
+          <div class="rpt-hero-actions">
+            <div class="rpt-hero-status">
+              <div class="rpt-status-ring" style="background:${statusBg};border:2px solid ${threatColor};">${statusSymbol}</div>
+              <span class="rpt-status-badge" style="background:${badgeBg};color:${threatColor};">${threat.toUpperCase() || 'UNKNOWN'}</span>
             </div>
-
-            <div style="display:flex; align-items:center; gap:0.75rem; margin-left: auto;">
-              <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
-                <div class="status-icon ${report.threat || ''}" style="width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; background: ${statusBg}; border: 2px solid ${statusColor};">
-                  <div class="status-icon-symbol" style="font-size:18px; color: #ffffff !important;">${statusSymbol}</div>
-                </div>
-                <span class="badge ${threatClass}" style="display:block; margin-top:6px; font-size:0.85rem; padding:6px 8px;">${(report.threat||'').toUpperCase()}</span>
-              </div>
-              <button id="download-report-btn" class="icon-button download-report-btn" style="background: var(--primary); color: white; border: none; padding: 0.5rem; border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.3s ease;" title="Download as PDF">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button id="download-report-btn" class="rpt-icon-btn" title="Download PDF">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
                 <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
             </button>
-            <button id="delete-report-btn" class="icon-button delete-report-btn" style="background: #ff4d4d; color: white; border: none; padding: 0.5rem; border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.3s ease;" title="Delete report">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button id="delete-report-btn" class="rpt-icon-btn danger" title="Delete report">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 <line x1="10" y1="11" x2="10" y2="17"></line>
                 <line x1="14" y1="11" x2="14" y2="17"></line>
               </svg>
             </button>
-            </div>
           </div>
         </div>
 
-        <div style="padding-top: 1.5rem;">
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-            <div>
-              <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Scan Date</p>
-              <p style="font-weight: 600; margin: 0; color: white;">${report.date}</p>
-            </div>
-            <div>
-              <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Scan Time</p>
-              <p style="font-weight: 600; margin: 0; color: white;">${report.time}</p>
-            </div>
-            <div>
-              <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Confidence Score</p>
-              <p style="font-weight: 600; margin: 0; color: white;">${report.confidence}%</p>
-            </div>
-            <div>
-              <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Risk Level</p>
-              <p style="font-weight: 600; margin: 0; color: ${threatColor};">${this.formatRisk(report.riskLevel) || 'Unknown'}</p>
-            </div>
-          </div>
-
-          <div style="padding: 1.5rem; background: var(--bg-secondary); border-radius: var(--radius-md); margin-bottom: 2rem;">
-            <h3 style="font-size: 1rem; margin-bottom: 1rem; margin-top: 0;">Target Information</h3>
-            <div style="display: flex; flex-direction: column; gap: 1rem;">
-              <div>
-                <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Scan Type</p>
-                <p style="font-weight: 600; margin: 0; color: white;">${report.type === 'url' ? 'URL Scan' : 'Email Scan'}</p>
-              </div>
-              <div>
-                <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Target</p>
-                ${targetInfo}
-              </div>
-            </div>
-          </div>
-
+        <!-- Metrics -->
+        <div class="rpt-metrics">
           <div>
-            <h3 style="font-size: 1rem; margin-bottom: 1rem; margin-top: 0;">Threat Indicators</h3>
-            <ul style="list-style: none; padding: 0; margin: 0;">
-              ${indicatorsHtml}
-            </ul>
+            <div class="rpt-metric-label">Date</div>
+            <div class="rpt-metric-value">${report.date || 'N/A'}</div>
           </div>
+          <div>
+            <div class="rpt-metric-label">Time</div>
+            <div class="rpt-metric-value">${report.time || 'N/A'}</div>
+          </div>
+          <div>
+            <div class="rpt-metric-label">Score</div>
+            <div class="rpt-metric-value" style="color:${threatColor}">${typeof report.threatScore === 'number' ? report.threatScore + '/100' : 'N/A'}</div>
+          </div>
+          <div>
+            <div class="rpt-metric-label">Confidence</div>
+            <div class="rpt-metric-value">${report.confidence}%</div>
+          </div>
+          <div>
+            <div class="rpt-metric-label">Risk</div>
+            <div class="rpt-metric-value" style="color:${threatColor}">${this.formatRisk(report.riskLevel) || 'Unknown'}</div>
+          </div>
+        </div>
 
-          <div style="margin-top: 2rem;">
-            <h3 style="font-size: 1rem; margin-bottom: 1rem;">Detected Issues</h3>
-            <ul style="list-style: disc; padding-left: 1.5rem; margin: 0;">
-              ${issuesHtml}
-            </ul>
-          </div>
+        <!-- Threat Indicators -->
+        <div class="rpt-section">
+          <h3 class="rpt-section-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Threat Indicators
+          </h3>
+          ${indicatorsHtml}
+        </div>
 
-          <div style="margin-top: 2rem; padding: 1.5rem; background: rgba(11, 99, 217, 0.1); border-left: 4px solid var(--primary); border-radius: var(--radius-md);">
-            <h3 style="font-size: 1rem; margin-bottom: 1rem; margin-top: 0; color: white;">Summary</h3>
-              <p style="font-size: 0.9rem; color: white; margin: 0; line-height: 1.6;">${this.escapeHtml(report.summary || '')}</p>
-          </div>
+        <!-- Detected Issues -->
+        <div class="rpt-section">
+          <h3 class="rpt-section-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Detected Issues
+          </h3>
+          ${issuesHtml}
+        </div>
+
+        <!-- Summary -->
+        <div class="rpt-section">
+          <h3 class="rpt-section-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Summary
+          </h3>
+          <div class="rpt-summary">${this.escapeHtml(report.summary || 'No summary available.')}</div>
         </div>
       </div>
     `;
 
     // Scroll to top of report
     setTimeout(() => {
-      document.querySelector('.results-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const card = container.querySelector('.rpt-card');
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
 
-    // Debug panel: show raw report object when debug flag enabled
+    // Debug panel
     try {
       const showDebug = localStorage.getItem('debugReports') === '1' || window.location.search.includes('debugReports=1');
       if (showDebug) {
@@ -704,7 +688,7 @@ class ReportsManager {
     this.currentReport = report;
     
     // Update active state in sidebar
-    document.querySelectorAll('.scan-preview').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.rpt-scan-item').forEach(el => el.classList.remove('active'));
     element.classList.add('active');
 
     // Render main report
@@ -857,68 +841,64 @@ class ReportsManager {
   }
 
   generateHtmlReport(report) {
-    const threatColor = this.getThreatColor(report.threat);
-    const threatIcon = report.threat === 'safe' ? '✓' : report.threat === 'suspicious' ? '⚠' : '✕';
+    const threat = (report.threat || 'safe').toLowerCase();
+    const statusColor = threat === 'safe' ? '#16a34a' : threat === 'suspicious' ? '#eab308' : '#dc2626';
+    const heroWord = threat === 'safe' ? 'Safe.' : threat === 'suspicious' ? 'Suspicious.' : 'Malicious.';
+    const badgeLabel = threat === 'safe' ? 'VERIFIED TARGET' : threat === 'suspicious' ? 'SUSPICIOUS TARGET' : 'THREAT DETECTED';
+    const badgeDesc = threat === 'safe'
+      ? 'No malicious signatures or behavioral anomalies detected during deep analysis.'
+      : threat === 'suspicious'
+      ? 'Suspicious patterns detected during analysis. Exercise caution.'
+      : 'Malicious signatures or behavioral anomalies detected. Avoid this target.';
+    const confidenceLabel = (report.confidence || 0) >= 80 ? 'High' : (report.confidence || 0) >= 50 ? 'Medium' : 'Low';
+    const riskSub = threat === 'safe' ? 'Minimal' : threat === 'suspicious' ? 'Moderate' : 'Severe';
+    const idStr = report.id ? String(report.id).substring(0, 8).toUpperCase() + '...' : 'N/A';
 
-    const indicatorsHtml = (report.indicators || []).map(indicator => `
-      <li style="margin-bottom: 12px; padding: 10px; background: rgba(11, 99, 217, 0.1); border-left: 3px solid #0B63D9; border-radius: 4px;">
-        <strong style="color: #333;">${this.escapeHtml(indicator)}</strong>
-      </li>
-    `).join('');
-    
-    const issuesHtml = (report.issues || []).map(issue => `
-      <li style="margin-bottom: 10px; color: #333;">${this.escapeHtml(issue)}</li>
-    `).join('');
+    // Parse URL
+    let urlHost = '', urlDomain = '', urlProtocol = '', hasSsl = false;
+    try {
+      const u = new URL(report.value);
+      urlHost = u.hostname;
+      urlDomain = report.domain || urlHost.replace(/^www\\./, '');
+      urlProtocol = u.protocol === 'https:' ? 'TLS 1.3' : 'HTTP';
+      hasSsl = u.protocol === 'https:';
+    } catch (e) {
+      urlHost = report.domain || report.value || 'N/A';
+      urlDomain = report.domain || 'N/A';
+      urlProtocol = (report.value || '').startsWith('https') ? 'TLS 1.3' : 'HTTP';
+      hasSsl = (report.value || '').startsWith('https');
+    }
 
-    // Generate detailed threat table if rawThreats exist
-    const threatTableHtml = report.rawThreats && report.rawThreats.length > 0 ? `
-      <h2>Threat Details</h2>
-      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-        <thead>
-          <tr style="background: #f0f0f0; border-bottom: 2px solid #0B63D9;">
-            <th style="padding: 10px; text-align: left; font-weight: 600; border: 1px solid #ddd;">Threat Type</th>
-            <th style="padding: 10px; text-align: left; font-weight: 600; border: 1px solid #ddd;">Severity</th>
-            <th style="padding: 10px; text-align: left; font-weight: 600; border: 1px solid #ddd;">Platform</th>
-            <th style="padding: 10px; text-align: left; font-weight: 600; border: 1px solid #ddd;">Source</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${report.rawThreats.map(t => `
-            <tr style="border-bottom: 1px solid #eee;">
-              <td style="padding: 10px; border: 1px solid #ddd; color: #333;">${this.escapeHtml((t.type || t.threatType || 'UNKNOWN').replace(/_/g, ' '))}</td>
-              <td style="padding: 10px; border: 1px solid #ddd; color: #333;">${report.threat === 'malicious' ? 'HIGH' : report.threat === 'suspicious' ? 'MEDIUM' : 'LOW'}</td>
-              <td style="padding: 10px; border: 1px solid #ddd; color: #333;">${this.escapeHtml((t.platform || t.platformType || 'ANY_PLATFORM').replace(/_/g, ' '))}</td>
-              <td style="padding: 10px; border: 1px solid #ddd; color: #333;">Threat Detection Engine</td>
-            </tr>
+    // Indicator dots
+    let dotItemsHtml = '';
+    if (threat === 'safe') {
+      dotItemsHtml = `
+        <div class="dot-item"><span class="dot" style="background:${statusColor}"></span><span>Reputation: Clean</span></div>
+        <div class="dot-item"><span class="dot" style="background:${statusColor}"></span><span>Malware: None</span></div>
+        <div class="dot-item"><span class="dot" style="background:${statusColor}"></span><span>Phishing: Negative</span></div>`;
+    } else if (threat === 'suspicious') {
+      dotItemsHtml = `
+        <div class="dot-item"><span class="dot" style="background:${statusColor}"></span><span>Reputation: Suspicious</span></div>
+        <div class="dot-item"><span class="dot" style="background:${statusColor}"></span><span>Malware: Check Required</span></div>
+        <div class="dot-item"><span class="dot" style="background:${statusColor}"></span><span>Phishing: Possible</span></div>`;
+    } else {
+      dotItemsHtml = `
+        <div class="dot-item"><span class="dot" style="background:${statusColor}"></span><span>Reputation: Flagged</span></div>
+        <div class="dot-item"><span class="dot" style="background:${statusColor}"></span><span>Malware: Detected</span></div>
+        <div class="dot-item"><span class="dot" style="background:${statusColor}"></span><span>Phishing: Positive</span></div>`;
+    }
+
+    // Threat indicators section
+    const indicators = report.indicators || [];
+    const indicatorsSectionHtml = indicators.length > 0 ? `
+      <section class="section">
+        <h3 class="section-title">THREAT INDICATORS</h3>
+        <div class="indicators-list">
+          ${indicators.map(ind => `
+            <div class="dot-item"><span class="dot" style="background:${statusColor}"></span><span>${this.escapeHtml(ind)}</span></div>
           `).join('')}
-        </tbody>
-      </table>
-    ` : '';
-
-    // Generate detected issues table if issues exist
-    const issuesTableHtml = report.issues && report.issues.length > 0 ? `
-      <h2>Detected Issues Details</h2>
-      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-        <thead>
-          <tr style="background: #f0f0f0; border-bottom: 2px solid #0B63D9;">
-            <th style="padding: 10px; text-align: left; font-weight: 600; border: 1px solid #ddd;">Issue</th>
-            <th style="padding: 10px; text-align: left; font-weight: 600; border: 1px solid #ddd;">Timestamp</th>
-            <th style="padding: 10px; text-align: left; font-weight: 600; border: 1px solid #ddd;">Engine</th>
-            <th style="padding: 10px; text-align: left; font-weight: 600; border: 1px solid #ddd;">Metadata</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${report.issues.map(issue => `
-            <tr style="border-bottom: 1px solid #eee;">
-              <td style="padding: 10px; border: 1px solid #ddd; color: #333;">${this.escapeHtml(issue)}</td>
-              <td style="padding: 10px; border: 1px solid #ddd; color: #333; font-size: 11px;">${new Date(report.timestamp || Date.now()).toISOString().replace('T', ' ').replace('Z', ' UTC')}</td>
-              <td style="padding: 10px; border: 1px solid #ddd; color: #333;">Threat Detection Engine</td>
-              <td style="padding: 10px; border: 1px solid #ddd; color: #333;">${this.escapeHtml(report.domain || 'N/A')}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    ` : '';
+        </div>
+      </section>` : '';
 
     return `<!DOCTYPE html>
 <html>
@@ -927,175 +907,330 @@ class ReportsManager {
   <title>PhishNet Scan Report</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { 
+    body {
       font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       line-height: 1.6;
-      color: #333;
-      background: #f5f5f5;
-      padding: 20px;
+      color: #000;
+      background: #fff;
     }
-    .container {
-      max-width: 900px;
+    .page {
+      max-width: 720px;
       margin: 0 auto;
-      background: white;
-      padding: 40px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 64px 32px;
     }
     .header {
-      text-align: center;
-      margin-bottom: 30px;
-      border-bottom: 2px solid #0B63D9;
-      padding-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 64px;
     }
-    .logo { font-size: 28px; font-weight: 700; color: #0B63D9; margin-bottom: 10px; }
-    h1 { font-size: 24px; color: #333; margin-bottom: 10px; }
-    h2 { font-size: 18px; color: #333; margin: 20px 0 15px 0; border-bottom: 2px solid #0B63D9; padding-bottom: 10px; }
-    .status-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
-    .status-box { padding: 20px; background: #f9f9f9; border-left: 4px solid #0B63D9; border-radius: 4px; }
-    .status-label { font-size: 12px; color: #666; margin-bottom: 10px; font-weight: 600; text-transform: uppercase; }
-    .status-value { font-size: 24px; font-weight: 700; color: ${threatColor}; margin-bottom: 10px; }
-    .badge { display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin: 10px 0; background: ${threatColor}; color: white; }
-    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
-    .info-item { padding: 12px; background: #f9f9f9; border-left: 3px solid #0B63D9; border-radius: 4px; }
-    .info-label { font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600; text-transform: uppercase; }
-    .info-value { font-size: 14px; color: #333; font-weight: 600; word-break: break-all; }
-    ul { list-style: none; padding: 0; margin: 15px 0; }
-    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-    th, td { padding: 12px; text-align: left; border: 1px solid #ddd; }
-    th { background: #f0f0f0; font-weight: 600; color: #333; }
-    tr:nth-child(even) { background: #f9f9f9; }
-    .summary-box { padding: 15px; background: #f0f7ff; border-left: 4px solid #0B63D9; border-radius: 4px; margin: 20px 0; }
-    .summary-box strong { display: block; margin-bottom: 10px; color: #0B63D9; }
-    .summary-text { color: #333; line-height: 1.8; }
-    .threat-analysis { padding: 15px; background: #f5f5f5; border-left: 4px solid #0B63D9; border-radius: 4px; margin: 20px 0; }
-    .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #999; font-size: 12px; }
-    
-    @media (max-width: 768px) {
-      body { padding: 10px; }
-      .container { padding: 15px; }
-      .logo { font-size: 22px; }
-      h1 { font-size: 18px; }
-      h2 { font-size: 16px; }
-      .status-section { grid-template-columns: 1fr; gap: 15px; }
-      .status-box { padding: 15px; }
-      .status-value { font-size: 20px; }
-      .info-grid { grid-template-columns: 1fr; gap: 15px; }
-      .info-item { padding: 10px; }
-      .info-label { font-size: 11px; }
-      .info-value { font-size: 13px; word-wrap: break-word; overflow-wrap: break-word; }
-      table { font-size: 12px; display: block; overflow-x: auto; }
-      th, td { padding: 8px; font-size: 12px; white-space: nowrap; }
-      ul li { margin-bottom: 8px; padding: 8px; word-wrap: break-word; overflow-wrap: break-word; }
-      .summary-box { padding: 12px; }
-      .threat-analysis { padding: 12px; }
-      .header { margin-bottom: 20px; padding-bottom: 15px; }
+    .header-left { display: flex; flex-direction: column; gap: 12px; }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
-    
-    @media (max-width: 480px) {
-      * { max-width: 100%; }
-      body { padding: 8px; }
-      .container { padding: 12px; }
-      .logo { font-size: 20px; margin-bottom: 5px; }
-      h1 { font-size: 16px; margin-bottom: 5px; }
-      h2 { font-size: 14px; margin: 15px 0 10px 0; }
-      .status-section { grid-template-columns: 1fr; gap: 10px; }
-      .status-box { padding: 12px; }
-      .status-label { font-size: 10px; }
-      .status-value { font-size: 18px; }
-      .badge { padding: 4px 8px; font-size: 11px; }
-      .info-grid { grid-template-columns: 1fr; gap: 10px; }
-      .info-item { padding: 8px; }
-      .info-label { font-size: 10px; }
-      .info-value { font-size: 12px; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; }
-      table { font-size: 11px; display: block; overflow-x: auto; width: 100%; }
-      thead { display: block; }
-      tbody { display: block; }
-      tr { display: block; margin-bottom: 10px; border: 1px solid #ddd; padding: 5px; }
-      th, td { padding: 6px; font-size: 11px; display: block; text-align: left; border: none; }
-      th::before { content: attr(data-label); display: block; font-weight: bold; }
-      ul { word-wrap: break-word; overflow-wrap: break-word; }
-      ul li { margin-bottom: 6px; padding: 6px; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; }
-      ul li strong { font-size: 12px; display: block; word-wrap: break-word; }
-      .summary-box { padding: 10px; }
-      .summary-text { font-size: 12px; word-wrap: break-word; overflow-wrap: break-word; }
-      .threat-analysis { padding: 10px; }
-      .threat-analysis p { font-size: 12px; margin: 5px 0; word-wrap: break-word; overflow-wrap: break-word; }
-      .footer { margin-top: 20px; padding-top: 15px; font-size: 11px; }
-      .footer p { margin: 3px 0; word-wrap: break-word; }
+    .brand-dot {
+      width: 7px; height: 7px;
+      background: #000;
+      border-radius: 50%;
     }
-    
-    @media print { body { background: white; padding: 0; } .container { box-shadow: none; } }
+    .brand-text {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #737373;
+    }
+    .report-title {
+      font-size: 32px;
+      font-weight: 300;
+      letter-spacing: -0.02em;
+      color: #000;
+    }
+    .report-title span { font-weight: 600; }
+    .meta {
+      font-family: "Courier New", monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #737373;
+    }
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 40px;
+      padding: 4px 0;
+    }
+    .meta-row + .meta-row { border-top: 1px solid #e6e6e6; }
+    .meta-val { color: #000; }
+    .hero {
+      display: flex;
+      align-items: baseline;
+      gap: 48px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+    .hero-text {
+      font-size: 80px;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      color: #000;
+    }
+    .hero-info { max-width: 260px; }
+    .badge-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: ${statusColor};
+      margin-bottom: 12px;
+    }
+    .badge-desc {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #737373;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 64px;
+    }
+    .stat {
+      border-left: 1px solid #e6e6e6;
+      padding: 6px 0 6px 16px;
+    }
+    .stat-label {
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #737373;
+      margin-bottom: 4px;
+    }
+    .stat-val {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .stat-sub {
+      font-size: 9px;
+      font-weight: 500;
+      color: #737373;
+      margin-left: 4px;
+    }
+    .section { margin-bottom: 48px; }
+    .section-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #a0a0a0;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #e6e6e6;
+      margin-bottom: 24px;
+    }
+    .url-label {
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #737373;
+      margin-bottom: 8px;
+    }
+    .url-box {
+      font-family: "Courier New", monospace;
+      font-size: 13px;
+      background: #f5f5f5;
+      padding: 12px 16px;
+      border-radius: 6px;
+      word-break: break-all;
+      margin-bottom: 32px;
+    }
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #f0f0f0;
+      margin-bottom: 16px;
+    }
+    .info-label { color: #737373; }
+    .info-value { font-weight: 600; }
+    .info-value.green { color: ${hasSsl ? '#16a34a' : '#000'}; }
+    .assessment {
+      display: flex;
+      gap: 48px;
+    }
+    .assessment-text {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 300;
+      line-height: 1.7;
+      color: rgba(0,0,0,0.8);
+    }
+    .dot-list { width: 240px; padding-top: 4px; }
+    .dot-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .indicators-list { padding-top: 4px; }
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 96px;
+    }
+    .footer-text {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #c0c0c0;
+    }
+    .shield-circle {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: 1px solid #e6e6e6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: #d0d0d0;
+    }
+    @media (max-width: 640px) {
+      .page { padding: 32px 16px; }
+      .header { flex-direction: column; align-items: flex-start; gap: 24px; }
+      .hero { flex-direction: column; gap: 16px; }
+      .hero-text { font-size: 48px; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .info-grid { grid-template-columns: 1fr; gap: 0; }
+      .assessment { flex-direction: column; gap: 24px; }
+      .dot-list { width: 100%; }
+      .footer { flex-direction: column; align-items: flex-start; gap: 16px; }
+    }
+    @media print { body { background: white; } .page { padding: 32px 0; } }
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="page">
+    <!-- Header -->
     <div class="header">
-      <div class="logo">PhishNet</div>
-      <h1>Security Scan Report</h1>
-      <p style="color: #999; margin: 10px 0 0 0;">Generated on ${report.date} at ${report.time}</p>
-    </div>
-
-    <h2>Scan Status</h2>
-    <div class="status-section">
-      <div class="status-box">
-        <div class="status-label">Threat Assessment</div>
-        <div class="status-value">${threatIcon} ${report.threat.toUpperCase()}</div>
-        <div class="badge">${report.threat.toUpperCase()}</div>
+      <div class="header-left">
+        <div class="brand">
+          <div class="brand-dot"></div>
+          <span class="brand-text">PhishNet Intelligence</span>
+        </div>
+        <h1 class="report-title">Scan <span>Report</span></h1>
       </div>
-      <div class="status-box">
-        <div class="status-label">Confidence Score</div>
-        <div class="status-value">${report.confidence}%</div>
-        <div style="color: #666; font-size: 12px;">Analysis Certainty</div>
-      </div>
-    </div>
-
-    <h2>Threat Analysis Results</h2>
-    <div class="threat-analysis">
-      <p><strong>Status:</strong> ${(report.threat || 'safe').toString().toUpperCase()}</p>
-      <p><strong>Detection Engine:</strong> ${report.rawThreats && report.rawThreats.length > 0 ? 'Threat Detection Engine' : 'Heuristic Analysis Engine'}</p>
-      <p><strong>Analyzed At:</strong> ${new Date(report.timestamp || Date.now()).toISOString().replace('T', ' ').replace('Z', ' UTC')}</p>
-    </div>
-
-    ${threatTableHtml}
-
-    <h2>Scan Information</h2>
-    <div class="info-grid">
-      <div class="info-item">
-        <div class="info-label">Scan Type</div>
-        <div class="info-value">${report.type === 'url' ? 'URL Scan' : 'Email Scan'}</div>
-      </div>
-      <div class="info-item">
-        <div class="info-label">Risk Level</div>
-        <div class="info-value">${this.formatRisk(report.riskLevel) || 'Unknown'}</div>
-      </div>
-      <div class="info-item">
-        <div class="info-label">Target</div>
-        <div class="info-value">${this.escapeHtml(this.getDisplayTarget(report))}</div>
-      </div>
-      <div class="info-item">
-        <div class="info-label">Scan Date</div>
-        <div class="info-value">${report.date} at ${report.time}</div>
+      <div class="meta">
+        <div class="meta-row">
+          <span>Date</span>
+          <span class="meta-val">${this.escapeHtml(report.date || 'N/A')}</span>
+        </div>
+        <div class="meta-row">
+          <span>ID</span>
+          <span class="meta-val">${idStr}</span>
+        </div>
       </div>
     </div>
 
-    <h2>Threat Indicators</h2>
-    <ul>${indicatorsHtml || '<li style="color: #999;">No indicators detected</li>'}</ul>
+    <!-- Hero Result -->
+    <section>
+      <div class="hero">
+        <div class="hero-text">${heroWord}</div>
+        <div class="hero-info">
+          <div class="badge-label">${badgeLabel}</div>
+          <p class="badge-desc">${badgeDesc}</p>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Confidence</div>
+          <div><span class="stat-val">${report.confidence || 0}%</span><span class="stat-sub">${confidenceLabel}</span></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Risk Level</div>
+          <div><span class="stat-val">${this.escapeHtml(report.riskLevel || 'Low')}</span><span class="stat-sub">${riskSub}</span></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Threat Score</div>
+          <div><span class="stat-val">${report.threatScore || 0}</span><span class="stat-sub">Score</span></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Encryption</div>
+          <div><span class="stat-val">${hasSsl ? 'SSL' : 'None'}</span><span class="stat-sub">${hasSsl ? 'Valid' : 'N/A'}</span></div>
+        </div>
+      </div>
+    </section>
 
-    ${issuesTableHtml}
+    <!-- Target Specification -->
+    <section class="section">
+      <h3 class="section-title">Target Specification</h3>
+      <div class="url-label">Endpoint URL</div>
+      <div class="url-box">${this.escapeHtml(report.value || 'N/A')}</div>
+      <div class="info-grid">
+        <div>
+          <div class="info-row">
+            <span class="info-label">Domain</span>
+            <span class="info-value">${this.escapeHtml(urlDomain)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Host</span>
+            <span class="info-value">${this.escapeHtml(urlHost)}</span>
+          </div>
+        </div>
+        <div>
+          <div class="info-row">
+            <span class="info-label">Protocol</span>
+            <span class="info-value">${urlProtocol}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Certificate</span>
+            <span class="info-value green">${hasSsl ? 'Active' : 'None'}</span>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    ${issuesHtml ? `<h2>Issues Summary</h2><ul>${issuesHtml}</ul>` : ''}
+    <!-- Security Assessment -->
+    <section class="section">
+      <h3 class="section-title">Security Assessment</h3>
+      <div class="assessment">
+        <div class="assessment-text">${this.escapeHtml(report.summary || 'No summary available.')}</div>
+        <div class="dot-list">${dotItemsHtml}</div>
+      </div>
+    </section>
 
-    <h2>Security Assessment Summary</h2>
-    <div class="summary-box">
-      <strong>${threatIcon} ${report.threat === 'safe' ? 'Safe Assessment' : report.threat === 'suspicious' ? 'Suspicious Warning' : 'Malicious Threat'}</strong>
-      <p class="summary-text">${this.escapeHtml(report.summary || 'No summary available')}</p>
-    </div>
+    ${indicatorsSectionHtml}
 
+    <!-- Footer -->
     <div class="footer">
-      <p>PhishNet Security Report</p>
-      <p>Report Generated: ${new Date().toLocaleString()}</p>
-      <p>© 2026 PhishNet Security. All rights reserved.</p>
+      <div class="footer-text">
+        <span>&copy; 2026 PhishNet</span>
+        <span>Security Operations</span>
+      </div>
+      <div class="shield-circle">&#x1F6E1;</div>
     </div>
   </div>
 </body>
@@ -1277,9 +1412,9 @@ class ReportsManager {
   applyFilter(filterType) {
     const { startDate, endDate, displayText } = this.getDateRange(filterType);
 
-    // Filter reports based on date range
+    // Filter reports based on date range — prefer stored timestamp for accuracy
     this.filteredReports = this.scanHistory.filter((report) => {
-      const reportDate = this.parseReportDate(report.date);
+      const reportDate = report.timestamp ? new Date(report.timestamp) : this.parseReportDate(report.date);
       return reportDate >= startDate && reportDate <= endDate;
     });
 
@@ -2170,13 +2305,13 @@ async function downloadReportAsPDF(elementId, fileName = "report.pdf") {
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 15;
+      const margin = 20;
       const contentWidth = pageWidth - margin * 2;
       let y = margin;
       
-      // Helper function to add new page if needed
+      // Helper: add new page if needed
       const checkNewPage = (requiredHeight = 20) => {
-        if (y + requiredHeight > pageHeight - margin) {
+        if (y + requiredHeight > pageHeight - 20) {
           pdf.addPage();
           y = margin;
           return true;
@@ -2184,236 +2319,389 @@ async function downloadReportAsPDF(elementId, fileName = "report.pdf") {
         return false;
       };
       
-      // Helper function to add wrapped text
-      const addWrappedText = (text, x, startY, maxWidth, lineHeight = 5) => {
-        const lines = pdf.splitTextToSize(text, maxWidth);
-        lines.forEach((line, i) => {
-          checkNewPage(lineHeight);
-          pdf.text(line, x, y);
-          y += lineHeight;
-        });
-        return y;
+      // Ultra-minimal color palette (matching Replit design)
+      const black = [0, 0, 0];
+      const muted = [115, 115, 115];
+      const lightMuted = [160, 160, 160];
+      const borderClr = [230, 230, 230];
+      const mutedBg = [245, 245, 245];
+      const safeGreen = [22, 163, 74];
+      const dangerRed = [220, 38, 38];
+      const warnOrange = [234, 179, 8];
+      
+      const threat = (report.threat || 'safe').toLowerCase();
+      const statusColor = threat === 'safe' ? safeGreen : threat === 'suspicious' ? warnOrange : dangerRed;
+      
+      // Parse URL for target specification
+      let urlHost = '', urlDomain = '', urlProtocol = '', hasSsl = false;
+      try {
+        const u = new URL(report.value);
+        urlHost = u.hostname;
+        urlDomain = report.domain || urlHost.replace(/^www\./, '');
+        urlProtocol = u.protocol === 'https:' ? 'TLS 1.3' : 'HTTP';
+        hasSsl = u.protocol === 'https:';
+      } catch (e) {
+        urlHost = report.domain || report.value || 'N/A';
+        urlDomain = report.domain || 'N/A';
+        urlProtocol = (report.value || '').startsWith('https') ? 'TLS 1.3' : 'HTTP';
+        hasSsl = (report.value || '').startsWith('https');
+      }
+      
+      // Helper: spaced uppercase text (simulates letter-spacing)
+      const spacedText = (text, spacing = 0.6) => {
+        return text.split('').join(String.fromCharCode(8202).repeat(Math.round(spacing)));
       };
       
-      // Colors
-      const primaryColor = [11, 99, 217]; // #0B63D9
-      const safeColor = [0, 255, 136]; // #00FF88
-      const warningColor = [255, 193, 7]; // #FFC107
-      const dangerColor = [255, 77, 77]; // #FF4D4D
-      const textDark = [51, 51, 51];
-      const textMuted = [102, 102, 102];
+      // ===== HEADER — Ultra Minimal =====
+      // Black dot
+      pdf.setFillColor(...black);
+      pdf.circle(margin + 1, y + 1, 0.8, 'F');
       
-      const threatColor = report.threat === 'safe' ? safeColor : report.threat === 'suspicious' ? warningColor : dangerColor;
-      
-      // ===== HEADER =====
-      // Logo/Brand
-      pdf.setFillColor(...primaryColor);
-      pdf.rect(0, 0, pageWidth, 40, 'F');
-      
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(24);
+      // "PHISHNET INTELLIGENCE" uppercase tracked
+      pdf.setTextColor(...muted);
+      pdf.setFontSize(6.5);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('PhishNet', margin, 18);
+      pdf.text(spacedText('PHISHNET INTELLIGENCE'), margin + 4, y + 1.8);
       
-      pdf.setFontSize(12);
+      // "Scan Report" large title
+      y += 10;
+      pdf.setTextColor(...black);
+      pdf.setFontSize(26);
       pdf.setFont('helvetica', 'normal');
-      pdf.text('Security Scan Report', margin, 28);
-      
-      pdf.setFontSize(9);
-      pdf.text(`Generated: ${report.date} at ${report.time}`, margin, 35);
-      
-      y = 50;
-      
-      // ===== THREAT STATUS BOX =====
-      const statusBoxHeight = 35;
-      pdf.setFillColor(245, 245, 245);
-      pdf.roundedRect(margin, y, contentWidth, statusBoxHeight, 3, 3, 'F');
-      
-      // Status indicator circle
-      pdf.setFillColor(...threatColor);
-      pdf.circle(margin + 15, y + statusBoxHeight/2, 8, 'F');
-      
-      // Status symbol
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(14);
+      pdf.text('Scan ', margin, y);
+      const scanW = pdf.getTextWidth('Scan ');
       pdf.setFont('helvetica', 'bold');
-      const statusSymbol = report.threat === 'safe' ? '✓' : report.threat === 'suspicious' ? '!' : 'X';
-      pdf.text(statusSymbol, margin + 12, y + statusBoxHeight/2 + 4);
+      pdf.text('Report', margin + scanW, y);
       
-      // Status text
-      pdf.setTextColor(...textDark);
-      pdf.setFontSize(16);
-      pdf.text(`Status: ${(report.threat || 'UNKNOWN').toUpperCase()}`, margin + 30, y + 14);
+      // Right side: Date + ID (mono font, right-aligned)
+      const rightX = pageWidth - margin;
+      pdf.setFont('courier', 'normal');
+      pdf.setFontSize(7);
       
-      pdf.setTextColor(...textMuted);
-      pdf.setFontSize(10);
-      pdf.text(`Confidence Score: ${report.confidence || 0}%  |  Risk Level: ${report.riskLevel || 'Unknown'}`, margin + 30, y + 26);
+      // Date row
+      pdf.setTextColor(...muted);
+      pdf.text('DATE', rightX - 52, y - 9);
+      pdf.setTextColor(...black);
+      pdf.text(report.date || 'N/A', rightX, y - 9, { align: 'right' });
       
-      y += statusBoxHeight + 15;
+      // Separator line
+      pdf.setDrawColor(...borderClr);
+      pdf.setLineWidth(0.15);
+      pdf.line(rightX - 52, y - 6, rightX, y - 6);
       
-      // ===== SCAN INFORMATION =====
-      pdf.setTextColor(...primaryColor);
-      pdf.setFontSize(14);
+      // ID row
+      pdf.setTextColor(...muted);
+      pdf.text('ID', rightX - 52, y - 2.5);
+      const idStr = report.id ? String(report.id).substring(0, 8).toUpperCase() + '...' : 'N/A';
+      pdf.setTextColor(...black);
+      pdf.text(idStr, rightX, y - 2.5, { align: 'right' });
+      
+      y += 22;
+      
+      // ===== HERO RESULT — Giant Status Text =====
+      const heroWord = threat === 'safe' ? 'Safe.' : threat === 'suspicious' ? 'Suspicious.' : 'Malicious.';
+      pdf.setTextColor(...black);
+      pdf.setFontSize(64);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('Scan Information', margin, y);
-      y += 3;
+      pdf.text(heroWord, margin, y);
       
-      // Underline
-      pdf.setDrawColor(...primaryColor);
-      pdf.setLineWidth(0.5);
-      pdf.line(margin, y, margin + 50, y);
-      y += 10;
+      // Badge + description (offset right of hero)
+      const heroW = pdf.getTextWidth(heroWord);
+      const badgeX = Math.min(margin + heroW + 8, margin + 105);
+      const badgeY = y - 16;
       
-      // Info grid
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(10);
-      
-      const infoItems = [
-        { label: 'Scan Type:', value: report.type === 'url' ? 'URL Scan' : 'Email Scan' },
-        { label: 'Target:', value: report.value || 'N/A' },
-        { label: 'Domain:', value: report.domain || 'N/A' },
-        { label: 'Scan Date:', value: `${report.date} at ${report.time}` }
-      ];
-      
-      infoItems.forEach(item => {
-        checkNewPage(12);
-        pdf.setTextColor(...textMuted);
-        pdf.text(item.label, margin, y);
-        pdf.setTextColor(...textDark);
-        const valueLines = pdf.splitTextToSize(item.value, contentWidth - 35);
-        valueLines.forEach((line, i) => {
-          pdf.text(line, margin + 35, y);
-          if (i < valueLines.length - 1) y += 5;
-        });
-        y += 8;
-      });
-      
-      y += 5;
-      
-      // ===== THREAT INDICATORS =====
-      checkNewPage(30);
-      pdf.setTextColor(...primaryColor);
-      pdf.setFontSize(14);
+      // Colored badge text
+      pdf.setTextColor(...statusColor);
+      pdf.setFontSize(6.5);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('Threat Indicators', margin, y);
-      y += 3;
-      pdf.line(margin, y, margin + 50, y);
-      y += 10;
+      const badgeSymbol = threat === 'safe' ? 'VERIFIED TARGET' : threat === 'suspicious' ? 'SUSPICIOUS TARGET' : 'THREAT DETECTED';
+      pdf.text(spacedText(badgeSymbol), badgeX, badgeY);
       
-      const indicators = report.indicators || [];
-      if (indicators.length === 0) {
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(10);
-        pdf.setTextColor(...textMuted);
-        pdf.text('No threat indicators detected', margin, y);
-        y += 8;
-      } else {
-        indicators.forEach((indicator, index) => {
-          checkNewPage(15);
-          
-          // Indicator box
-          const indicatorHeight = 12;
-          const isWarning = indicator.toLowerCase().includes('suspicious') || indicator.toLowerCase().includes('http') || indicator.toLowerCase().includes('risk');
-          const indicatorColor = isWarning ? warningColor : (report.threat === 'safe' ? safeColor : dangerColor);
-          
-          pdf.setFillColor(indicatorColor[0], indicatorColor[1], indicatorColor[2], 0.1);
-          pdf.setDrawColor(...indicatorColor);
-          pdf.setLineWidth(0.3);
-          pdf.roundedRect(margin, y - 3, contentWidth, indicatorHeight, 2, 2, 'FD');
-          
-          pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(9);
-          pdf.setTextColor(...textDark);
-          const indicatorText = pdf.splitTextToSize(`• ${indicator}`, contentWidth - 10);
-          pdf.text(indicatorText[0], margin + 5, y + 4);
-          
-          y += indicatorHeight + 3;
-        });
-      }
-      
-      y += 5;
-      
-      // ===== DETECTED ISSUES =====
-      checkNewPage(30);
-      pdf.setTextColor(...primaryColor);
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Detected Issues', margin, y);
-      y += 3;
-      pdf.line(margin, y, margin + 50, y);
-      y += 10;
-      
-      const issues = report.issues || [];
-      if (issues.length === 0) {
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(10);
-        pdf.setTextColor(...textMuted);
-        pdf.text('No issues detected', margin, y);
-        y += 8;
-      } else {
-        issues.forEach((issue, index) => {
-          checkNewPage(10);
-          pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(10);
-          pdf.setTextColor(...textDark);
-          pdf.text(`${index + 1}. ${issue}`, margin + 5, y);
-          y += 7;
-        });
-      }
-      
-      y += 10;
-      
-      // ===== SECURITY SUMMARY =====
-      checkNewPage(50);
-      pdf.setTextColor(...primaryColor);
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Security Assessment Summary', margin, y);
-      y += 3;
-      pdf.line(margin, y, margin + 70, y);
-      y += 10;
-      
-      // Summary box
-      const summaryText = report.summary || 'No summary available';
-      const summaryLines = pdf.splitTextToSize(summaryText, contentWidth - 20);
-      const summaryBoxHeight = Math.max(30, summaryLines.length * 5 + 15);
-      
-      checkNewPage(summaryBoxHeight + 10);
-      
-      pdf.setFillColor(240, 247, 255);
-      pdf.setDrawColor(...primaryColor);
-      pdf.setLineWidth(0.8);
-      pdf.roundedRect(margin, y, contentWidth, summaryBoxHeight, 3, 3, 'FD');
-      
-      // Left border accent
-      pdf.setFillColor(...primaryColor);
-      pdf.rect(margin, y, 3, summaryBoxHeight, 'F');
-      
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(10);
-      pdf.setTextColor(...textDark);
-      
-      let summaryY = y + 10;
-      summaryLines.forEach(line => {
-        pdf.text(line, margin + 10, summaryY);
-        summaryY += 5;
-      });
-      
-      y += summaryBoxHeight + 15;
-      
-      // ===== FOOTER =====
-      // Add footer on last page
-      const footerY = pageHeight - 15;
-      pdf.setDrawColor(200, 200, 200);
-      pdf.setLineWidth(0.3);
-      pdf.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
-      
-      pdf.setTextColor(...textMuted);
+      // Description
+      pdf.setTextColor(...muted);
       pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
-      pdf.text('PhishNet Security Report', margin, footerY);
-      pdf.text(`Report ID: ${report.id || 'N/A'}`, pageWidth / 2 - 15, footerY);
-      pdf.text('© 2026 PhishNet Security', pageWidth - margin - 35, footerY);
+      const heroDesc = threat === 'safe'
+        ? 'No malicious signatures or behavioral\nanomalies detected during deep analysis.'
+        : threat === 'suspicious'
+        ? 'Suspicious patterns detected during\nanalysis. Exercise caution.'
+        : 'Malicious signatures or behavioral\nanomalies detected. Avoid this target.';
+      heroDesc.split('\n').forEach((line, i) => {
+        pdf.text(line, badgeX, badgeY + 5 + (i * 4));
+      });
+      
+      y += 14;
+      
+      // ===== STATS GRID — Border-left accent =====
+      const confidenceLabel = report.confidence >= 80 ? 'High' : report.confidence >= 50 ? 'Medium' : 'Low';
+      const riskSub = threat === 'safe' ? 'Minimal' : threat === 'suspicious' ? 'Moderate' : 'Severe';
+      
+      const stats = [
+        { label: 'CONFIDENCE', value: `${report.confidence || 0}%`, sub: confidenceLabel },
+        { label: 'RISK LEVEL', value: report.riskLevel || 'Low', sub: riskSub },
+        { label: 'THREAT SCORE', value: `${report.threatScore || 0}`, sub: 'Score' },
+        { label: 'ENCRYPTION', value: hasSsl ? 'SSL' : 'None', sub: hasSsl ? 'Valid' : 'N/A' }
+      ];
+      
+      const colW = contentWidth / 4;
+      stats.forEach((stat, i) => {
+        const sx = margin + (i * colW);
+        
+        // Left border accent line
+        pdf.setDrawColor(...borderClr);
+        pdf.setLineWidth(0.3);
+        pdf.line(sx, y, sx, y + 16);
+        
+        // Label (tiny uppercase)
+        pdf.setTextColor(...muted);
+        pdf.setFontSize(5.5);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(spacedText(stat.label), sx + 4, y + 4);
+        
+        // Value (large)
+        pdf.setTextColor(...black);
+        pdf.setFontSize(15);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(stat.value, sx + 4, y + 12);
+        
+        // Sub text after value
+        const vw = pdf.getTextWidth(stat.value);
+        pdf.setTextColor(...muted);
+        pdf.setFontSize(6.5);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(stat.sub, sx + 5 + vw, y + 12);
+      });
+      
+      y += 30;
+      
+      // ===== TARGET SPECIFICATION =====
+      checkNewPage(55);
+      
+      // Section header
+      pdf.setTextColor(...lightMuted);
+      pdf.setFontSize(7);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(spacedText('TARGET SPECIFICATION'), margin, y);
+      y += 3;
+      pdf.setDrawColor(...borderClr);
+      pdf.setLineWidth(0.15);
+      pdf.line(margin, y, pageWidth - margin, y);
+      y += 10;
+      
+      // "ENDPOINT URL" label
+      pdf.setTextColor(...muted);
+      pdf.setFontSize(5.5);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(spacedText('ENDPOINT URL'), margin, y);
+      y += 5;
+      
+      // URL box with muted background
+      pdf.setFillColor(...mutedBg);
+      pdf.roundedRect(margin, y - 3, contentWidth, 10, 1.5, 1.5, 'F');
+      pdf.setTextColor(...black);
+      pdf.setFontSize(9);
+      pdf.setFont('courier', 'normal');
+      const urlDisplay = String(report.value || 'N/A');
+      const urlTrunc = urlDisplay.length > 72 ? urlDisplay.substring(0, 72) + '...' : urlDisplay;
+      pdf.text(urlTrunc, margin + 4, y + 4);
+      y += 16;
+      
+      // Domain / Host / Protocol / Certificate grid (2 columns)
+      const halfW = contentWidth / 2 - 8;
+      const gridData = [
+        [
+          { label: 'Domain', value: urlDomain || 'N/A' },
+          { label: 'Host', value: urlHost || 'N/A' }
+        ],
+        [
+          { label: 'Protocol', value: urlProtocol },
+          { label: 'Certificate', value: hasSsl ? 'Active' : 'None', green: hasSsl }
+        ]
+      ];
+      
+      gridData.forEach((col, ci) => {
+        const cx = margin + (ci * (halfW + 16));
+        col.forEach((item, ri) => {
+          const ry = y + (ri * 12);
+          
+          // Label
+          pdf.setTextColor(...muted);
+          pdf.setFontSize(9);
+          pdf.setFont('helvetica', 'normal');
+          pdf.text(item.label, cx, ry);
+          
+          // Value (right-aligned)
+          pdf.setTextColor(...(item.green ? safeGreen : black));
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(item.value, cx + halfW, ry, { align: 'right' });
+          
+          // Bottom border
+          pdf.setDrawColor(...borderClr);
+          pdf.setLineWidth(0.12);
+          pdf.line(cx, ry + 3, cx + halfW, ry + 3);
+        });
+      });
+      
+      y += 32;
+      
+      // ===== SECURITY ASSESSMENT =====
+      checkNewPage(55);
+      
+      // Section header
+      pdf.setTextColor(...lightMuted);
+      pdf.setFontSize(7);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(spacedText('SECURITY ASSESSMENT'), margin, y);
+      y += 3;
+      pdf.setDrawColor(...borderClr);
+      pdf.setLineWidth(0.15);
+      pdf.line(margin, y, pageWidth - margin, y);
+      y += 10;
+      
+      // Left: summary prose
+      const summaryText = report.summary || 'No summary available.';
+      const summaryMaxW = contentWidth * 0.58;
+      pdf.setTextColor(30, 30, 30);
+      pdf.setFontSize(10.5);
+      pdf.setFont('helvetica', 'normal');
+      const sumLines = pdf.splitTextToSize(summaryText, summaryMaxW);
+      const sumStartY = y;
+      
+      sumLines.forEach(line => {
+        checkNewPage(6);
+        pdf.text(line, margin, y);
+        y += 5.5;
+      });
+      
+      // Right: indicator status dots
+      const dotX = margin + contentWidth * 0.64;
+      let dotY = sumStartY;
+      
+      // Base indicators based on threat level
+      let dotItems;
+      if (threat === 'safe') {
+        dotItems = [
+          { label: 'Reputation: Clean', color: safeGreen },
+          { label: 'Malware: None', color: safeGreen },
+          { label: 'Phishing: Negative', color: safeGreen }
+        ];
+      } else if (threat === 'suspicious') {
+        dotItems = [
+          { label: 'Reputation: Suspicious', color: warnOrange },
+          { label: 'Malware: Check Required', color: warnOrange },
+          { label: 'Phishing: Possible', color: warnOrange }
+        ];
+      } else {
+        dotItems = [
+          { label: 'Reputation: Flagged', color: dangerRed },
+          { label: 'Malware: Detected', color: dangerRed },
+          { label: 'Phishing: Positive', color: dangerRed }
+        ];
+      }
+      
+      dotItems.forEach(item => {
+        pdf.setFillColor(...item.color);
+        pdf.circle(dotX, dotY + 0.7, 0.5, 'F');
+        pdf.setTextColor(...black);
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(item.label, dotX + 3, dotY + 1.5);
+        dotY += 8;
+      });
+      
+      y = Math.max(y, dotY) + 8;
+      
+      // ===== THREAT INDICATORS (if any) =====
+      const indicators = report.indicators || [];
+      if (indicators.length > 0) {
+        checkNewPage(35);
+        
+        pdf.setTextColor(...lightMuted);
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(spacedText('THREAT INDICATORS'), margin, y);
+        y += 3;
+        pdf.setDrawColor(...borderClr);
+        pdf.setLineWidth(0.15);
+        pdf.line(margin, y, pageWidth - margin, y);
+        y += 8;
+        
+        indicators.forEach(indicator => {
+          checkNewPage(10);
+          
+          // Colored dot
+          pdf.setFillColor(...statusColor);
+          pdf.circle(margin + 2, y + 0.7, 0.5, 'F');
+          
+          // Indicator text
+          pdf.setTextColor(...black);
+          pdf.setFontSize(9);
+          pdf.setFont('helvetica', 'normal');
+          const indLines = pdf.splitTextToSize(String(indicator), contentWidth - 10);
+          indLines.forEach(line => {
+            pdf.text(line, margin + 6, y + 1.5);
+            y += 5;
+          });
+          y += 2;
+        });
+        
+        y += 5;
+      }
+      
+      // ===== DETECTED ISSUES (if any) =====
+      const issues = report.issues || [];
+      if (issues.length > 0) {
+        checkNewPage(35);
+        
+        pdf.setTextColor(...lightMuted);
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(spacedText('DETECTED ISSUES'), margin, y);
+        y += 3;
+        pdf.setDrawColor(...borderClr);
+        pdf.setLineWidth(0.15);
+        pdf.line(margin, y, pageWidth - margin, y);
+        y += 8;
+        
+        issues.forEach((issue, idx) => {
+          checkNewPage(10);
+          pdf.setFillColor(...statusColor);
+          pdf.circle(margin + 2, y + 0.7, 0.5, 'F');
+          pdf.setTextColor(...black);
+          pdf.setFontSize(9);
+          pdf.setFont('helvetica', 'normal');
+          const issLines = pdf.splitTextToSize(String(issue), contentWidth - 10);
+          issLines.forEach(line => {
+            pdf.text(line, margin + 6, y + 1.5);
+            y += 5;
+          });
+          y += 2;
+        });
+        
+        y += 5;
+      }
+      
+      // ===== FOOTER — Minimal =====
+      const footerY = pageHeight - 15;
+      
+      pdf.setTextColor(...lightMuted);
+      pdf.setFontSize(6);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(spacedText('© 2026 PHISHNET'), margin, footerY);
+      
+      const copyW = pdf.getTextWidth(spacedText('© 2026 PHISHNET'));
+      pdf.text(spacedText('SECURITY OPERATIONS'), margin + copyW + 8, footerY);
+      
+      // Shield circle icon on right
+      const shieldCX = pageWidth - margin - 4;
+      const shieldCY = footerY - 1.5;
+      pdf.setDrawColor(...borderClr);
+      pdf.setLineWidth(0.3);
+      pdf.circle(shieldCX, shieldCY, 3.5, 'S');
+      pdf.setTextColor(...lightMuted);
+      pdf.setFontSize(6);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('S', shieldCX - 1.2, shieldCY + 1.2);
       
       // Save PDF
       pdf.save(fileName);

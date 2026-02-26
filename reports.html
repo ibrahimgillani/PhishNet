@@ -21,860 +21,470 @@
   <link rel="stylesheet" href="styles.css">
   
   <style>
-    .report-layout {
+    /* ===== Report Layout ===== */
+    .rpt-layout {
       display: grid;
-      grid-template-columns: 1fr 350px;
-      gap: 2rem;
-      margin-top: 2rem;
-    }
-    
-    @media (max-width: 968px) {
-      .report-layout {
-        grid-template-columns: 1fr;
-        justify-items: stretch;
-        align-items: start;
-      }
-      
-      #main-report {
-        width: 100%;
-        max-width: 100%;
-        margin-left: 0 !important;
-        margin-right: 0 !important;
-      }
-      
-      .report-layout > div {
-        width: 100%;
-        max-width: 100%;
-        margin-left: 0 !important;
-        margin-right: 0 !important;
-      }
-      
-      #main-report .card,
-      #main-report .results-card {
-        margin-left: 0 !important;
-        margin-right: 0 !important;
-        width: 100% !important;
-      }
-      
-      /* Fix select dropdown on mobile */
-      .container {
-        overflow-x: hidden !important;
-        max-width: 100vw !important;
-      }
-      
-      .card {
-        overflow: visible !important;
-        max-width: 100% !important;
-      }
-      
-      .filter-card-body {
-        padding: 0.75rem 0.5rem 1.5rem 0.5rem !important;
-        max-width: 100% !important;
-        overflow-x: hidden !important;
-      }
-      
-      #report-filter-select {
-        max-width: calc(100vw - 4rem) !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-        position: relative !important;
-        font-size: 0.875rem !important;
-      }
-      
-      /* Ensure dropdown menu stays within viewport */
-      select {
-        max-width: 100% !important;
-      }
-      
-      select option {
-        max-width: 100% !important;
-      }
-    }
-    
-    .alert-item {
-      padding: 1rem 0;
-      border-bottom: 1px solid var(--border-color);
-    }
-    
-    .alert-item:last-child {
-      border-bottom: none;
-    }
-    
-    .alert-item h4 {
-      font-size: 0.9375rem;
-      margin-bottom: 0.25rem;
-    }
-    
-    .alert-item p {
-      font-size: 0.875rem;
-      color: var(--text-muted);
-      margin: 0;
-    }
-
-    .recent-scans-container {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .scan-preview {
-      padding: 0.75rem;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-
-    .scan-preview:hover {
-      background: rgba(255, 255, 255, 0.1);
-      border-color: var(--primary);
-    }
-
-    .scan-preview.active {
-      border-color: var(--primary);
-      background: rgba(11, 99, 217, 0.1);
-    }
-
-    .scan-preview-title {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-bottom: 0.25rem;
-      text-transform: uppercase;
-    }
-
-    .scan-preview-value {
-      font-size: 0.8rem;
-      color: white;
-      font-weight: 600;
-      word-break: break-all;
-      margin-bottom: 0.5rem;
-    }
-
-    .scan-preview-status {
-      display: inline-block;
-      padding: 0.25rem 0.5rem;
-      border-radius: 3px;
-      font-size: 0.7rem;
-      font-weight: 600;
-    }
-
-    /* Filter card spacing */
-    .filter-card {
-      margin-top: 2rem;
-    }
-
-    @media (max-width: 768px) {
-      .filter-card {
-        margin-top: 3rem;
-      }
-    }
-
-    .results-card {
-      position: relative;
-    }
-
-    .close-results-btn {
-      position: absolute;
-      top: 1.5rem;
-      right: 1.5rem;
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-      padding: 0.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.3s ease;
-      z-index: 10;
-    }
-
-    .close-results-btn:hover {
-      color: var(--primary);
-      transform: scale(1.1);
-    }
-
-    .close-results-btn svg {
-      width: 24px;
-      height: 24px;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 3rem 2rem;
-      color: var(--text-muted);
-    }
-
-    .empty-state svg {
-      width: 64px;
-      height: 64px;
-      margin-bottom: 1rem;
-      opacity: 0.5;
-    }
-
-    .empty-state h3 {
-      font-size: 1.5rem;
-      color: white;
-      margin-bottom: 0.5rem;
-    }
-
-    .empty-state p {
-      margin: 0;
-    }
-
-    .empty-state a {
-      color: var(--primary);
-      text-decoration: none;
-      font-weight: 600;
-      margin-top: 1rem;
-      display: inline-block;
-    }
-
-    /* Filtered Reports Section Styles */
-    .filtered-report-card {
-      padding: 1.25rem;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      transition: all 0.3s ease;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-
-    .filtered-report-card:hover {
-      background: rgba(255, 255, 255, 0.1);
-      border-color: var(--primary);
-      transform: translateY(-2px);
-    }
-
-    .filtered-report-card-content {
-      flex: 1;
-      min-width: 250px;
-    }
-
-    .filtered-report-card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      margin-bottom: 0.75rem;
-      flex-wrap: wrap;
-    }
-
-    .filtered-report-type {
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      font-weight: 600;
-      letter-spacing: 0.5px;
-    }
-
-    .filtered-report-target {
-      font-size: 0.9rem;
-      color: white;
-      font-weight: 600;
-      word-break: break-all;
-      margin-bottom: 0.5rem;
-    }
-
-    .filtered-report-meta {
-      display: flex;
+      grid-template-columns: 1fr 300px;
       gap: 1.5rem;
-      flex-wrap: wrap;
-      font-size: 0.8rem;
+      margin-top: 1.5rem;
+    }
+
+    /* ===== Page Header ===== */
+    .rpt-page-header { margin-bottom: 0.5rem; }
+    .rpt-page-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0 0 0.25rem 0;
+    }
+    .rpt-page-sub {
+      font-size: 0.85rem;
       color: var(--text-muted);
+      margin: 0;
     }
 
-    .filtered-report-meta span {
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
+    /* ===== Report Card ===== */
+    .rpt-card {
+      background: var(--card-bg, #0f0f10);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-lg, 12px);
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
     }
 
-    .filtered-report-actions {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
-    }
-
-    .filtered-report-badge {
-      padding: 0.35rem 0.75rem;
-      border-radius: 4px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      white-space: nowrap;
-    }
-
-    @media (max-width: 768px) {
-      .filtered-report-card {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      .filtered-report-card-header {
-        width: 100%;
-      }
-
-      .filtered-report-actions {
-        width: 100%;
-      }
-    }
-
-    /* Filtered Reports Modal Styles */
-    .filtered-reports-modal {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 10000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 1rem;
-      animation: fadeIn 0.3s ease-out;
-    }
-
-    .filtered-reports-modal.hidden {
-      display: none;
-    }
-
-    .filtered-reports-modal-backdrop {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.7);
-      backdrop-filter: blur(4px);
-      z-index: -1;
-    }
-
-    .filtered-reports-modal-window {
-      background: var(--bg-dark);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg);
-      width: 100%;
-      max-width: 1200px;
-      max-height: 92vh;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-      animation: slideUp 0.3s ease-out;
-      position: relative;
-    }
-
-    .filtered-reports-modal-header {
+    /* ===== Report Hero ===== */
+    .rpt-hero {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
       gap: 1rem;
-      padding: 1rem 1.5rem;
-      border-bottom: 1px solid var(--border-color);
-      background: linear-gradient(135deg, rgba(11, 99, 217, 0.05), rgba(11, 99, 217, 0.02));
-    }
-
-    .filtered-reports-modal-close {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 0.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: var(--radius-md);
-      transition: all 0.3s ease;
-      flex-shrink: 0;
-    }
-
-    .filtered-reports-modal-close:hover {
-      background: rgba(255, 255, 255, 0.1);
-      color: white;
-    }
-
-    .filtered-reports-modal-stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 1rem;
-      padding: 0.75rem 1.5rem;
-      border-bottom: 1px solid var(--border-color);
-      background: rgba(11, 99, 217, 0.05);
-    }
-
-    .modal-stat {
-      text-align: center;
-    }
-
-    .modal-stat-label {
-      font-size: 0.7rem;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      margin-bottom: 0.25rem;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-    }
-
-    .modal-stat-value {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: white;
-      margin: 0;
-    }
-
-    .filtered-reports-modal-body {
-      flex: 1;
-      overflow-y: auto;
-      overflow-x: hidden;
-      padding: 1.5rem;
-      min-height: 0;
-      width: 100%;
-      box-sizing: border-box;
-    }
-
-    .filtered-reports-modal-footer {
-      display: flex;
-      gap: 1rem;
-      padding: 1rem 1.5rem;
-      border-top: 1px solid var(--border-color);
-      background: rgba(11, 99, 217, 0.02);
-      flex-wrap: wrap;
-    }
-
-    /* Detailed Report Card for Modal */
-    .modal-report-card {
-      padding: 1.25rem;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      transition: all 0.3s ease;
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-      overflow: hidden;
-    }
-
-    .modal-report-card:hover {
-      border-color: var(--primary);
-      box-shadow: 0 8px 16px rgba(11, 99, 217, 0.15);
-    }
-
-    .modal-report-card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-    }
-
-    .modal-report-card-title {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      flex: 1;
-      min-width: 250px;
-    }
-
-    .modal-report-type-badge {
-      padding: 0.35rem 0.75rem;
-      background: rgba(11, 99, 217, 0.2);
-      color: var(--primary);
-      border-radius: 4px;
-      font-size: 0.7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-
-    .modal-report-threat-badge {
-      padding: 0.35rem 0.75rem;
-      border-radius: 4px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      white-space: nowrap;
-      text-transform: uppercase;
-    }
-
-    .modal-report-target {
-      font-size: 0.9rem;
-      color: white;
-      font-weight: 600;
-      word-break: break-all;
-      margin-bottom: 1rem;
-      font-family: monospace;
-      padding: 0.75rem;
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: var(--radius-sm);
-    }
-
-    .modal-report-meta {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 1rem;
       margin-bottom: 1.5rem;
-      padding-bottom: 1.5rem;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      flex-wrap: wrap;
     }
-
-    .modal-report-meta-item {
+    .rpt-hero-info { flex: 1; min-width: 200px; }
+    .rpt-hero-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+    }
+    .rpt-hero-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0 0 0.25rem 0;
+    }
+    .rpt-hero-target {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      word-break: break-all;
+      line-height: 1.5;
+    }
+    .rpt-hero-actions {
       display: flex;
       align-items: center;
       gap: 0.5rem;
+      flex-shrink: 0;
     }
-
-    .modal-report-meta-label {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      font-weight: 600;
-    }
-
-    .modal-report-meta-value {
-      font-size: 0.9rem;
-      color: white;
-      font-weight: 500;
-    }
-
-    .modal-report-section {
-      margin-bottom: 1.5rem;
-    }
-
-    .modal-report-section-title {
-      font-size: 0.875rem;
-      color: var(--primary);
-      text-transform: uppercase;
-      font-weight: 600;
-      margin-bottom: 0.75rem;
-      letter-spacing: 0.5px;
-    }
-
-    .modal-report-section-content {
-      padding: 1rem;
-      background: rgba(0, 0, 0, 0.3);
-      border-left: 3px solid var(--primary);
-      border-radius: var(--radius-sm);
-      font-size: 0.9rem;
-      color: white;
-      line-height: 1.6;
-    }
-
-    .modal-report-items-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
+    .rpt-hero-status {
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .rpt-status-ring {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .rpt-status-badge {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.15rem 0.55rem;
+      border-radius: 20px;
+    }
+    .rpt-icon-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius-sm, 6px);
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+    .rpt-icon-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+    .rpt-icon-btn.danger:hover { background: rgba(255,77,77,0.15); color: #FF4D4D; border-color: rgba(255,77,77,0.25); }
+
+    /* ===== Metrics Row ===== */
+    .rpt-metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 1rem;
+      padding: 1rem 0;
+      border-top: 1px solid rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      margin-bottom: 1.5rem;
+    }
+    .rpt-metric-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      font-weight: 500;
+      margin-bottom: 0.2rem;
+    }
+    .rpt-metric-value {
+      font-family: 'Inter', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-primary);
     }
 
+    /* ===== Sections ===== */
+    .rpt-section { margin-bottom: 1.5rem; }
+    .rpt-section:last-child { margin-bottom: 0; }
+    .rpt-section-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin: 0 0 0.75rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .rpt-section-title svg { opacity: 0.5; }
+
+    /* Indicator items */
+    .rpt-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.6rem 0.75rem;
+      border-radius: var(--radius-sm, 6px);
+      background: rgba(255,255,255,0.02);
+      border-left: 3px solid var(--primary-blue, #0B63D9);
+      margin-bottom: 0.5rem;
+      font-size: 0.82rem;
+      color: var(--text-primary);
+    }
+    .rpt-indicator.threat { border-left-color: #FF4D4D; }
+    .rpt-indicator.warning { border-left-color: #FFC107; }
+    .rpt-indicator.safe { border-left-color: #00FF88; }
+    .rpt-indicator-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .rpt-indicator-none {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      opacity: 0.6;
+      padding: 0.5rem 0;
+    }
+
+    /* ===== Summary ===== */
+    .rpt-summary {
+      padding: 1rem;
+      background: rgba(11,99,217,0.06);
+      border-left: 3px solid var(--primary-blue, #0B63D9);
+      border-radius: var(--radius-sm, 6px);
+      font-size: 0.84rem;
+      line-height: 1.65;
+      color: var(--text-primary);
+    }
+
+    /* ===== Issue item ===== */
+    .rpt-issue {
+      padding: 0.5rem 0;
+      font-size: 0.82rem;
+      color: var(--text-primary);
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .rpt-issue:last-child { border-bottom: none; }
+
+    /* ===== Sidebar ===== */
+    .rpt-sidebar-card {
+      background: var(--card-bg, #0f0f10);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-lg, 12px);
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .rpt-sidebar-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0 0 0.75rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .rpt-sidebar-title svg { opacity: 0.5; }
+
+    /* Recent scan items */
+    .rpt-scan-item {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      padding: 0.6rem 0.7rem;
+      border-radius: var(--radius-sm, 6px);
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.04);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 0.4rem;
+    }
+    .rpt-scan-item:last-child { margin-bottom: 0; }
+    .rpt-scan-item:hover {
+      background: rgba(255,255,255,0.045);
+      border-color: rgba(11,99,217,0.25);
+    }
+    .rpt-scan-item.active {
+      border-color: rgba(11,99,217,0.4);
+      background: rgba(11,99,217,0.08);
+    }
+    .rpt-scan-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .rpt-scan-body { flex: 1; min-width: 0; }
+    .rpt-scan-url {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .rpt-scan-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      margin-top: 0.15rem;
+    }
+    .rpt-scan-badge {
+      font-size: 0.6rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      padding: 0.1rem 0.4rem;
+      border-radius: 20px;
+    }
+
+    /* Filter */
+    .rpt-filter-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      margin-bottom: 0.4rem;
+      display: block;
+    }
+    .rpt-filter-select {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      background: #0f0f10;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: var(--radius-sm, 6px);
+      color: #e5e7eb;
+      font-size: 0.82rem;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      margin-bottom: 0.65rem;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      padding-right: 2rem;
+    }
+    .rpt-filter-select option {
+      background: #0f0f10;
+      color: #e5e7eb;
+    }
+    .rpt-filter-btn {
+      width: 100%;
+      padding: 0.55rem 1rem;
+      background: rgba(11,99,217,0.08);
+      color: var(--primary-blue, #0B63D9);
+      border: 1px solid rgba(11,99,217,0.2);
+      border-radius: 20px;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+    .rpt-filter-btn:hover {
+      background: var(--primary-blue, #0B63D9);
+      color: #fff;
+      border-color: var(--primary-blue, #0B63D9);
+    }
+
+    /* ===== Empty State ===== */
+    .rpt-empty { text-align: center; padding: 3rem 2rem; color: var(--text-muted); }
+    .rpt-empty svg { width: 48px; height: 48px; margin-bottom: 0.75rem; opacity: 0.3; }
+    .rpt-empty h3 { font-size: 1.1rem; color: var(--text-primary); margin-bottom: 0.35rem; }
+    .rpt-empty p { margin: 0; font-size: 0.85rem; }
+    .rpt-empty a { color: var(--primary-blue, #0B63D9); text-decoration: none; font-weight: 600; }
+
+    /* ===== Filtered Reports Modal ===== */
+    .filtered-reports-modal {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 10000; display: flex; align-items: center; justify-content: center;
+      padding: 1rem; animation: fadeIn 0.3s ease-out;
+    }
+    .filtered-reports-modal.hidden { display: none; }
+    .filtered-reports-modal-backdrop {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: -1;
+    }
+    .filtered-reports-modal-window {
+      background: var(--card-bg, #0f0f10); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: var(--radius-lg, 12px); width: 100%; max-width: 1100px; max-height: 90vh;
+      display: flex; flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5); animation: slideUp 0.3s ease-out;
+    }
+    .filtered-reports-modal-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .filtered-reports-modal-close {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      padding: 0.4rem; display: flex; align-items: center; justify-content: center;
+      border-radius: var(--radius-sm, 6px); transition: all 0.2s ease; flex-shrink: 0;
+    }
+    .filtered-reports-modal-close:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+    .filtered-reports-modal-stats {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 1rem; padding: 0.85rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .modal-stat { text-align: center; }
+    .modal-stat-label {
+      font-size: 0.65rem; text-transform: uppercase; color: var(--text-muted);
+      margin-bottom: 0.2rem; font-weight: 600; letter-spacing: 0.04em;
+    }
+    .modal-stat-value { font-size: 1.35rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+    .filtered-reports-modal-body {
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+      padding: 1.5rem; min-height: 0; box-sizing: border-box;
+    }
+    .filtered-reports-modal-footer {
+      display: flex; gap: 0.75rem; padding: 1rem 1.5rem;
+      border-top: 1px solid rgba(255,255,255,0.06); flex-wrap: wrap;
+    }
+
+    /* ===== Modal Report Card ===== */
+    .modal-report-card {
+      padding: 1.25rem; background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06); border-radius: var(--radius-md, 8px);
+      transition: all 0.2s ease; box-sizing: border-box; overflow: hidden;
+    }
+    .modal-report-card:hover { border-color: rgba(11,99,217,0.25); }
+    .modal-report-card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem; margin-bottom: 0.75rem; flex-wrap: wrap;
+    }
+    .modal-report-card-title {
+      display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 200px;
+    }
+    .modal-report-type-badge {
+      padding: 0.2rem 0.55rem; background: rgba(11,99,217,0.12); color: var(--primary-blue, #0B63D9);
+      border-radius: 20px; font-size: 0.65rem; font-weight: 600;
+      text-transform: uppercase; white-space: nowrap;
+    }
+    .modal-report-threat-badge {
+      padding: 0.2rem 0.55rem; border-radius: 20px;
+      font-size: 0.65rem; font-weight: 600; white-space: nowrap; text-transform: uppercase;
+    }
+    .modal-report-target {
+      font-size: 0.82rem; color: var(--text-primary); font-weight: 500;
+      word-break: break-all; margin-bottom: 0.75rem; font-family: 'Roboto Mono', monospace;
+      padding: 0.6rem; background: rgba(0,0,0,0.2); border-radius: var(--radius-sm, 6px);
+    }
+    .modal-report-meta {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 0.75rem; margin-bottom: 1.25rem; padding-bottom: 1.25rem;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .modal-report-meta-item { display: flex; align-items: center; gap: 0.4rem; }
+    .modal-report-meta-label {
+      font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;
+    }
+    .modal-report-meta-value { font-size: 0.82rem; color: var(--text-primary); font-weight: 500; }
+    .modal-report-section { margin-bottom: 1.25rem; }
+    .modal-report-section-title {
+      font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;
+      font-weight: 600; margin-bottom: 0.5rem; letter-spacing: 0.04em;
+    }
+    .modal-report-section-content {
+      padding: 0.85rem; background: rgba(0,0,0,0.2); border-left: 3px solid var(--primary-blue, #0B63D9);
+      border-radius: var(--radius-sm, 6px); font-size: 0.82rem; color: var(--text-primary); line-height: 1.6;
+    }
+    .modal-report-items-list {
+      list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem;
+    }
     .modal-report-items-list li {
-      padding: 0.75rem;
-      background: rgba(0, 0, 0, 0.3);
-      border-left: 3px solid var(--primary);
-      border-radius: var(--radius-sm);
-      font-size: 0.875rem;
-      color: white;
+      padding: 0.6rem; background: rgba(0,0,0,0.2); border-left: 3px solid var(--primary-blue, #0B63D9);
+      border-radius: var(--radius-sm, 6px); font-size: 0.82rem; color: var(--text-primary);
     }
+    .modal-report-items-list li.safe { border-left-color: #00FF88; }
+    .modal-report-items-list li.warning { border-left-color: #FFC107; }
+    .modal-report-items-list li.threat { border-left-color: #FF4D4D; }
 
-    .modal-report-items-list li.safe {
-      border-left-color: #00FF88;
+    /* ===== Animations ===== */
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 968px) {
+      .rpt-layout { grid-template-columns: 1fr; }
     }
-
-    .modal-report-items-list li.warning {
-      border-left-color: #FFC107;
-    }
-
-    .modal-report-items-list li.threat {
-      border-left-color: #FF4D4D;
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-      }
-      to {
-        opacity: 1;
-      }
-    }
-
-    @keyframes slideUp {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
     @media (max-width: 768px) {
-      .filtered-reports-modal {
-        padding: 0;
-        align-items: stretch;
-      }
-
+      .rpt-layout { gap: 1rem; }
+      .rpt-hero { flex-direction: column; }
+      .rpt-hero-actions { width: 100%; justify-content: flex-end; }
+      .rpt-metrics { grid-template-columns: repeat(2, 1fr); }
+      .filtered-reports-modal { padding: 0; }
       .filtered-reports-modal-window {
-        max-width: 100%;
-        min-height: 100vh;
-        max-height: 100vh;
-        border-radius: 0;
-        margin: 0;
+        max-width: 100%; min-height: 100vh; max-height: 100vh;
+        border-radius: 0; margin: 0;
       }
-
-      .filtered-reports-modal-header {
-        padding: 1rem;
-        flex-shrink: 0;
-      }
-
-      .filtered-reports-modal-body {
-        padding: 1rem;
-        flex: 1;
-        overflow-y: auto;
-        overflow-x: hidden;
-        -webkit-overflow-scrolling: touch;
-      }
-
-      .filtered-reports-modal-stats {
-        padding: 0.5rem 1rem;
-        grid-template-columns: repeat(2, 1fr);
-        flex-shrink: 0;
-      }
-
-      .filtered-reports-modal-footer {
-        padding: 1rem;
-        flex-shrink: 0;
-      }
-
-      .modal-stat-value {
-        font-size: 1.25rem;
-      }
-
-      .modal-report-card {
-        padding: 1rem;
-        overflow: hidden;
-      }
-
-      #modal-reports-list {
-        width: 100%;
-        max-width: 100%;
-        box-sizing: border-box;
-      }
-
-      .modal-report-card * {
-        max-width: 100%;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-      }
-      
-      /* Sidebar fixes for mobile */
-      .report-layout > div:last-child {
-        width: 100%;
-        max-width: 100%;
-        padding: 0 !important;
-        overflow-x: hidden !important;
-      }
-      
-      .card {
-        width: 100%;
-        max-width: 100%;
-        margin: 0 !important;
-        overflow: hidden !important;
-        padding: 1rem !important;
-        box-sizing: border-box !important;
-      }
-      
-      .filter-card-header,
-      .filter-card-body {
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-      }
-      
-      .recent-scans-container {
-        width: 100%;
-        overflow: hidden !important;
-      }
-      
-      .scan-preview {
-        width: 100% !important;
-        box-sizing: border-box !important;
-        overflow: hidden !important;
-        margin: 0 !important;
-      }
-      
-      .scan-preview-value {
-        max-width: calc(100% - 1rem) !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        word-wrap: break-word !important;
-        overflow-wrap: break-word !important;
-        white-space: normal !important;
-      }
-      
-      #report-filter-select {
-        width: calc(100% - 0.5rem) !important;
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-        margin: 0 !important;
-      }
-      
-      .btn-filter {
-        width: calc(100% - 0.5rem) !important;
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-      }
+      .filtered-reports-modal-stats { grid-template-columns: repeat(2, 1fr); }
     }
-    
     @media (max-width: 480px) {
-      html, body {
-        overflow-x: hidden !important;
-        width: 100% !important;
-      }
-      
-      .container {
-        overflow-x: hidden !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        padding: 0.75rem !important;
-        margin: 0 auto !important;
-      }
-      
-      .report-layout {
-        gap: 0.75rem !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        margin: 0 auto !important;
-        padding: 0 !important;
-        overflow-x: hidden !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-      }
-      
-      .report-layout > * {
-        width: 100% !important;
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-        overflow-x: hidden !important;
-        margin: 0 auto !important;
-        padding: 0.75rem !important;
-      }
-      
-      .report-layout > div:last-child {
-        width: 100% !important;
-        max-width: 100% !important;
-        padding: 0.75rem !important;
-        margin: 0 auto !important;
-        overflow-x: hidden !important;
-      }
-      
-      #main-report {
-        width: 100% !important;
-        max-width: 100% !important;
-        margin: 0 auto !important;
-      }
-      
-      .card {
-        width: 100% !important;
-        max-width: 100% !important;
-        margin: 0 auto !important;
-        padding: 1rem !important;
-        overflow: hidden !important;
-        box-sizing: border-box !important;
-      }
-      
-      .card h3 {
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        max-width: 100% !important;
-        text-align: center !important;
-      }
-      
-      .recent-scans-container {
-        width: 100% !important;
-        max-width: 100% !important;
-        overflow: hidden !important;
-        margin: 0 auto !important;
-        padding: 0 !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-      }
-      
-      .scan-preview {
-        width: 100% !important;
-        max-width: 90% !important;
-        box-sizing: border-box !important;
-        overflow: hidden !important;
-        padding: 0.75rem !important;
-        margin: 0.5rem auto !important;
-      }
-      
-      .scan-preview-title {
-        max-width: 100%;
-        word-wrap: break-word;
-        text-align: center !important;
-      }
-      
-      .scan-preview-value {
-        font-size: 0.75rem !important;
-        max-width: 100% !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        word-wrap: break-word !important;
-        overflow-wrap: break-word !important;
-        white-space: normal !important;
-        margin: 0.25rem 0 !important;
-        padding: 0 !important;
-        text-align: center !important;
-      }
-      
-      .scan-preview-status {
-        font-size: 0.65rem !important;
-        padding: 0.3rem 0.5rem !important;
-        margin: 0.25rem auto 0 !important;
-        display: inline-block !important;
-      }
-      
-      .filter-card-body {
-        padding: 1rem !important;
-        overflow: hidden !important;
-        margin: 0 auto !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-      }
-      
-      .filter-card-header {
-        word-wrap: break-word !important;
-        overflow-wrap: break-word !important;
-        text-align: center !important;
-      }
-      
-      #report-filter-select {
-        width: 90% !important;
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-        margin: 0.5rem auto !important;
-        padding: 0.75rem !important;
-        font-size: 0.875rem !important;
-        display: block !important;
-      }
-      
-      .btn-filter {
-        width: 90% !important;
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-        margin: 0.75rem auto 0 !important;
-        padding: 0.75rem !important;
-        display: block !important;
-      }
+      .rpt-layout { gap: 0.75rem; }
+      .rpt-metrics { grid-template-columns: 1fr 1fr; gap: 0.75rem; }
     }
   </style>
 </head>
@@ -884,6 +494,16 @@
   <header>
     <div class="header-container">
       <a href="index.html" class="brand-logo">
+        <svg class="logo-icon" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M14 2L4 7v6.5c0 6.08 4.27 11.77 10 13.5 5.73-1.73 10-7.42 10-13.5V7L14 2z" fill="url(#logo-grad)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+          <path d="M10 14.5l2.5 2.5L18 11.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <defs>
+            <linearGradient id="logo-grad" x1="4" y1="2" x2="24" y2="26" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#0B63D9"/>
+              <stop offset="100%" stop-color="#00B7D9"/>
+            </linearGradient>
+          </defs>
+        </svg>
         <span class="logo-text">PhishNet</span>
       </a>
 
@@ -904,59 +524,53 @@
   <main id="main-content">
     <section>
       <div class="container">
-        <div style="text-align: center; margin-bottom: 2rem;">
-          <h1 style="margin-bottom: 0.5rem;">Scan Reports</h1>
-          <p style="color: var(--text-muted); margin: 0;">Detailed analysis of your security scans</p>
+        <div class="rpt-page-header">
+          <h1 class="rpt-page-title">Scan Reports</h1>
+          <p class="rpt-page-sub">Detailed analysis of your security scans</p>
         </div>
 
-        <div id="reports-container" class="report-layout animate-fade-in">
+        <div id="reports-container" class="rpt-layout animate-fade-in">
           <!-- Main Report Content -->
           <div id="main-report">
             <!-- Populated by JavaScript -->
           </div>
 
-          <!-- Sidebar with Recent Scans -->
+          <!-- Sidebar -->
           <div>
-            <!-- Recent Scans Card -->
-            <div class="card">
-              <div class="card-header">
-                <h3 class="card-title">Recent Scans</h3>
-              </div>
-              <div id="recent-scans-list" class="recent-scans-container" style="padding-top: 1rem;">
+            <!-- Recent Scans -->
+            <div class="rpt-sidebar-card">
+              <h3 class="rpt-sidebar-title">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Recent Scans
+              </h3>
+              <div id="recent-scans-list">
                 <!-- Populated by JavaScript -->
               </div>
             </div>
 
-            <!-- Filter Reports Card -->
-            <div class="card filter-card">
-              <div class="card-header">
-                <h3 class="card-title">Filter Reports</h3>
-              </div>
+            <!-- Filter Reports -->
+            <div class="rpt-sidebar-card">
+              <h3 class="rpt-sidebar-title">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                Filter Reports
+              </h3>
               
-              <div class="filter-card-body" style="padding: 0.75rem 1.5rem 1.5rem 1.5rem;">
-                <!-- Time Range Label -->
-                <label for="report-filter-select" style="display: block; font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500;">Select Time Range</label>
-                
-                <!-- Dropdown Filter -->
-                <select id="report-filter-select" class="form-input" style="width: 100%; padding: 0.75rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; font-size: 0.9375rem; cursor: pointer; margin-bottom: 1rem;">
-                  <option value="">-- Select a time range --</option>
-                  <option value="7days">Last 7 Days</option>
-                  <option value="1month">Last 1 Month</option>
-                  <option value="2months">Last 2 Months</option>
-                  <option value="3months">Last 3 Months</option>
-                  <option value="4months">Last 4 Months</option>
-                  <option value="5months">Last 5 Months</option>
-                  <option value="6months">Last 6 Months</option>
-                </select>
+              <label for="report-filter-select" class="rpt-filter-label">Time Range</label>
+              <select id="report-filter-select" class="rpt-filter-select">
+                <option value="">-- Select a time range --</option>
+                <option value="7days">Last 7 Days</option>
+                <option value="1month">Last 1 Month</option>
+                <option value="2months">Last 2 Months</option>
+                <option value="3months">Last 3 Months</option>
+                <option value="4months">Last 4 Months</option>
+                <option value="5months">Last 5 Months</option>
+                <option value="6months">Last 6 Months</option>
+              </select>
 
-                <!-- Filter Button -->
-                <button id="apply-filter-btn" class="btn btn-primary" style="width: 100%; padding: 0.75rem;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; margin-right: 0.5rem;">
-                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                  </svg>
-                  Apply Filter
-                </button>
-              </div>
+              <button id="apply-filter-btn" class="rpt-filter-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                Apply Filter
+              </button>
             </div>
           </div>
         </div>
@@ -1037,11 +651,18 @@
 
 <footer>
     <div class="footer-grid">
-      <div class="footer-section">
-        <h4>Quick URL Scan</h4>
-        <div class="footer-quick-check">
-          <input type="text" id="footer-quick-url" name="footer-quick-url" placeholder="Enter URL " class="form-input" autocomplete="url">
-          <button class="btn btn-primary btn-sm">Quick Check</button>
+      <div class="footer-section footer-brand">
+        <h3 class="footer-brand-title">PhishNet</h3>
+        <p class="footer-brand-desc">Scan URLs and emails for phishing threats, malware, and security risks in real-time</p>
+        <div class="footer-cta-row">
+          <a href="index.html#quick-scan" class="footer-cta-btn" data-scan-type="url">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Scan URL
+          </a>
+          <a href="index.html#quick-scan" class="footer-cta-btn" data-scan-type="email">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            Check Email
+          </a>
         </div>
       </div>
 
@@ -1050,35 +671,38 @@
         <ul>
           <li><a href="dashboard.html">Email/URL Scan</a></li>
           <li><a href="dashboard.html">Dashboard</a></li>
+          <li><a href="reports.html">Reports</a></li>
           <li><a href="pricing.html">Pricing</a></li>
+          <li><a href="blog.html">Blog</a></li>
         </ul>
       </div>
 
       <div class="footer-section">
-        <h4>About</h4>
+        <h4>Information</h4>
         <ul>
-          <li><a href="terms.html">Terms & Services</a></li>
-          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="about.html">About Us</a></li>
           <li><a href="faq.html">FAQs</a></li>
-          <li><a href="about.html">Features</a></li>
-          <li><a href="blog.html">Blog</a></li>
+          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="terms.html">Terms of Service</a></li>
+          <li><a href="demo.html">Demos</a></li>
         </ul>
       </div>
 
       <div class="footer-section">
         <h4>Connect With Us</h4>
         <div class="footer-socials">
-          <a href="#" aria-label="Instagram"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
+          <a href="#" aria-label="Twitter/X"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
           <a href="#" aria-label="Facebook"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>
-          <a href="#" aria-label="Twitter"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
-          <a href="#" aria-label="GitHub"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg></a>
           <a href="#" aria-label="LinkedIn"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a>
+          <a href="#" aria-label="GitHub"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg></a>
+          <a href="#" aria-label="Instagram"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
         </div>
       </div>
     </div>
 
     <div class="footer-copyright">
-      © 2025 PhishNet. All rights reserved.
+      <div class="footer-copyright-line"></div>
+      &copy; 2026 PhishNet. All rights reserved.
     </div>
   </footer>
 
@@ -1099,7 +723,7 @@
   </script>
   <script src="config.js"></script>
   <script src="app.js?v=20260124.1"></script>
-  <script src="reports.js?v=20260207.3"></script>
+  <script src="reports.js?v=20260213.4"></script>
 
   <!-- PhishNet Chatbot Widget -->
   <div id="chatbot-container">

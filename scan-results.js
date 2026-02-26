@@ -108,7 +108,7 @@
                 target: (String(item.scanType || '').toLowerCase().indexOf('email') !== -1) ? (item.senderEmail || item.email || item.url || '') : (item.url || item.value || ''),
                 type: item.scanType || ((item.url||'').includes('@') ? 'email' : 'url'),
                 result: normalized || (item.isSafe === true ? 'safe' : (item.isSafe === false ? 'malicious' : 'safe')),
-                confidence: item.confidence || null,
+                confidence: item.confidence || (item.threatScore != null ? (item.status === 'safe' ? Math.max(0, 100 - item.threatScore) : Math.min(100, Math.max(item.threatScore, 50))) : (() => { const t = (item.threatLevel || item.threat || item.status || '').toString().toLowerCase(); if (t === 'safe') return 95; if (['unsafe','phishing','threat','high','critical','malicious'].includes(t)) return 85; if (['medium','suspicious','low'].includes(t)) return 70; return null; })()),
                 date: item.checkedAt ? new Date(item.checkedAt).toLocaleDateString() : '',
                 time: item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString() : ''
               ,
@@ -193,7 +193,7 @@
         <td title="${displayTarget}">${displayTarget}</td>
         <td>${scan.type ? scan.type.toUpperCase() : ""}</td>
         <td class="${resultClass}">${scan.result || (scan.threat ? scan.threat.charAt(0).toUpperCase() + scan.threat.slice(1) : "")}</td>
-        <td>${scan.confidence}%</td>
+        <td>${(()=>{let c=Number(scan.confidence);if(!Number.isFinite(c)||c===0){const t=(scan.result||scan.threat||'').toLowerCase();c=t==='safe'?95:t==='malicious'?85:t==='suspicious'?70:0;}return c>0?(c<=1?Math.round(c*100):Math.round(c))+'%':'N/A';})()}</td>
         <td>${scan.date ? scan.date + " " + (scan.time || "") : (scan.time || "")}</td>
         <td class="actions-cell"></td>
       `;
@@ -210,6 +210,7 @@
     const scan = scans.find((s) => String(s.id) === String(id));
     if (!scan) return;
     localStorage.setItem('selectedScanId', String(id));
+    localStorage.setItem('selectedScanTime', String(Date.now()));
     // If we have a preserved raw server record, store that for the detailed report page
     try {
       if (scan.raw) {
@@ -255,7 +256,7 @@
           const response = await fetch(getApiUrlWithParams(window.API_CONFIG.api.endpoints.users.history, { limit: 200 }), { headers: { 'Authorization': `Bearer ${token}` } });
           if (response.ok) {
             const data = await response.json();
-            scans = (data.data && data.data.history) ? data.data.history.map((item, idx) => ({ id: String(item._id), target: (String(item.scanType || '').toLowerCase().indexOf('email') !== -1) ? (item.senderEmail || item.email || item.url || '') : (item.url || item.value || ''), type: item.scanType, result: mapThreatLevel(item.threatLevel), confidence: item.confidence, date: new Date(item.checkedAt).toLocaleDateString(), time: new Date(item.checkedAt).toLocaleTimeString(), raw: item })) : [];
+            scans = (data.data && data.data.history) ? data.data.history.map((item, idx) => ({ id: String(item._id), target: (String(item.scanType || '').toLowerCase().indexOf('email') !== -1) ? (item.senderEmail || item.email || item.url || '') : (item.url || item.value || ''), type: item.scanType, result: mapThreatLevel(item.threatLevel), confidence: item.confidence || (item.threatScore != null ? (item.status === 'safe' ? Math.max(0, 100 - item.threatScore) : Math.min(100, Math.max(item.threatScore, 50))) : (() => { const t = (item.threatLevel || item.status || '').toString().toLowerCase(); if (t === 'safe') return 95; if (['unsafe','phishing','threat','high','critical','malicious'].includes(t)) return 85; if (['medium','suspicious','low'].includes(t)) return 70; return null; })()), date: new Date(item.checkedAt).toLocaleDateString(), time: new Date(item.checkedAt).toLocaleTimeString(), raw: item })) : [];
             saveScans();
             renderTable();
             const storedSelected = localStorage.getItem('selectedScanId');

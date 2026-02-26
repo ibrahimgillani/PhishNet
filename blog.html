@@ -23,6 +23,16 @@
   <header>
     <div class="header-container">
       <a href="index.html" class="brand-logo">
+        <svg class="logo-icon" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M14 2L4 7v6.5c0 6.08 4.27 11.77 10 13.5 5.73-1.73 10-7.42 10-13.5V7L14 2z" fill="url(#logo-grad)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+          <path d="M10 14.5l2.5 2.5L18 11.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <defs>
+            <linearGradient id="logo-grad" x1="4" y1="2" x2="24" y2="26" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#0B63D9"/>
+              <stop offset="100%" stop-color="#00B7D9"/>
+            </linearGradient>
+          </defs>
+        </svg>
         <span class="logo-text">PhishNet</span>
       </a>
 
@@ -43,68 +53,140 @@
   </header>
 
   <main id="main-content">
-    <section style="background: var(--bg-secondary); padding: 3rem 0 2rem;">
-      <div class="container">
-        <h1 style="text-align: center; margin-bottom: 1rem;">PhishNet Blog</h1>
-        <p style="text-align: center; color: var(--text-muted); max-width: 600px; margin: 0 auto;">
-          Stay informed with the latest news, tips, and insights about phishing protection and cybersecurity.
-        </p>
-      </div>
-    </section>
-
-    <section>
-      <div class="container">
-        <div class="blog-layout">
-          <!-- Main Content -->
-          <div>
-            <!-- Blog Posts Container (dynamically populated) -->
-            <div id="blog-posts-container" class="animate-fade-in">
-              <!-- Blog cards will be rendered here by blog.js -->
-              <div class="card" style="margin-bottom: 2rem; text-align: center; padding: 2rem;">
-                <p style="color: var(--text-muted);">Loading blogs...</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Sidebar -->
-          <div>
-            <!-- Search -->
-            <div class="card" style="margin-bottom: 2rem;">
-              <form>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="blog-search" class="form-label">Search Blog</label>
-                  <input type="search" id="blog-search" class="form-input" placeholder="Search articles...">
-                </div>
-              </form>
-            </div>
-
-            <!-- Categories -->
-            <div class="card" style="margin-bottom: 2rem;">
-              <h3 style="margin-bottom: 1rem;">Categories</h3>
-              <ul id="category-list" style="list-style: none; padding: 0; margin: 0;">
-                <!-- Categories will be rendered here by blog.js -->
-              </ul>
-            </div>
-
-            <!-- Recent Posts -->
-            <div class="card">
-              <h3 style="margin-bottom: 1rem;">Recent Posts</h3>
-              <ul id="recent-posts-list" style="list-style: none; padding: 0; margin: 0;">
-                <!-- Recent posts will be rendered here by blog.js -->
-              </ul>
-            </div>
-          </div>
+    <!-- Hero -->
+    <section class="blg-hero">
+      <div class="blg-hero-inner">
+        <p class="blg-hero-label">Blog & Resources</p>
+        <h1 class="blg-hero-title">Cybersecurity Insights</h1>
+        <p class="blg-hero-sub">Expert analysis, latest threats, and actionable security tips to keep you protected.</p>
+        <div class="blg-search-wrap">
+          <svg class="blg-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="search" id="blog-search" class="blg-search" placeholder="Search articles…">
         </div>
       </div>
     </section>
+
+    <!-- Filters -->
+    <section class="blg-filters">
+      <div class="blg-filters-inner">
+        <div id="category-pills" class="blg-pills">
+          <!-- rendered by blog.js -->
+        </div>
+        <div class="blg-count" id="blog-count"></div>
+      </div>
+    </section>
+
+    <!-- Grid -->
+    <section class="blg-section">
+      <div id="blog-posts-container" class="blg-grid">
+        <div class="blg-empty">Loading articles…</div>
+      </div>
+
+      <!-- Pagination -->
+      <div class="blg-pag" id="blog-pagination"></div>
+    </section>
   </main>
+
+  <style>
+    /* ── Blog: blg-* scoped ── */
+    .blg-hero{padding:4.5rem 1.5rem 3rem;text-align:center;background:radial-gradient(ellipse at 50% 0%,rgba(11,99,217,.12) 0%,transparent 70%);position:relative}
+    .blg-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(circle 1px at center,rgba(255,255,255,.04) 1px,transparent 1px);background-size:28px 28px;pointer-events:none}
+    .blg-hero-inner{max-width:640px;margin:0 auto;position:relative}
+    .blg-hero-label{font-size:.75rem;text-transform:uppercase;letter-spacing:.12em;color:var(--primary-blue);font-weight:600;margin-bottom:.5rem}
+    .blg-hero-title{font-family:'Orbitron',sans-serif;font-size:clamp(1.8rem,4vw,2.6rem);font-weight:700;color:#fff;margin-bottom:.75rem;letter-spacing:-.02em}
+    .blg-hero-sub{color:var(--text-muted);font-size:.95rem;line-height:1.6;max-width:480px;margin:0 auto 1.5rem}
+    .blg-search-wrap{position:relative;max-width:440px;margin:0 auto}
+    .blg-search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--text-muted);pointer-events:none}
+    .blg-search{width:100%;padding:.75rem .75rem .75rem 42px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:var(--radius-md);color:#fff;font-size:.9rem;outline:none;transition:border-color .2s,box-shadow .2s}
+    .blg-search:focus{border-color:var(--primary-blue);box-shadow:0 0 0 3px rgba(11,99,217,.18)}
+    .blg-search::placeholder{color:var(--text-muted)}
+
+    /* Filters */
+    .blg-filters{padding:0 1.5rem;max-width:1200px;margin:0 auto}
+    .blg-filters-inner{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding-bottom:1rem;border-bottom:1px solid var(--border-color)}
+    .blg-pills{display:flex;gap:.5rem;flex-wrap:wrap;overflow-x:auto;scrollbar-width:none}
+    .blg-pills::-webkit-scrollbar{display:none}
+    .blg-pill{padding:.4rem 1rem;border-radius:var(--radius-md);border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:.8rem;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .2s}
+    .blg-pill:hover{border-color:var(--primary-blue);color:#fff}
+    .blg-pill.active{background:var(--primary-blue);border-color:var(--primary-blue);color:#fff}
+    .blg-pill .blg-pill-n{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:18px;margin-left:6px;padding:0 5px;border-radius:9px;font-size:.65rem;font-weight:700;background:rgba(255,255,255,.12);color:inherit}
+    .blg-pill.active .blg-pill-n{background:rgba(255,255,255,.25)}
+    .blg-count{font-size:.8rem;color:var(--text-muted);white-space:nowrap}
+
+    /* Grid */
+    .blg-section{max-width:1200px;margin:0 auto;padding:2rem 1.5rem 3rem}
+    .blg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem}
+    .blg-empty{grid-column:1/-1;text-align:center;padding:3rem;color:var(--text-muted)}
+
+    /* Card */
+    .blg-card{background:var(--card-bg);border:1px solid var(--border-color);border-radius:var(--radius-lg);overflow:hidden;display:flex;flex-direction:column;transition:border-color .25s,transform .25s,box-shadow .25s}
+    .blg-card:hover{border-color:var(--primary-blue);transform:translateY(-3px);box-shadow:0 12px 32px rgba(0,0,0,.35)}
+    .blg-card-img-wrap{position:relative;width:100%;height:180px;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0d1b2a 100%);overflow:hidden;display:flex;align-items:center;justify-content:center}
+    .blg-card-img-wrap::after{content:'';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:1;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='none' stroke='%23ffffff18' stroke-width='1.5'%3E%3Crect x='3' y='3' width='18' height='18' rx='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpath d='M21 15l-5-5L5 21'/%3E%3C/svg%3E") center/40px no-repeat}
+    .blg-card-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;z-index:2}
+    .blg-card-body{padding:1.25rem 1.25rem 1rem;flex:1;display:flex;flex-direction:column}
+    .blg-card-top{display:flex;align-items:center;gap:.5rem;margin-bottom:.65rem;flex-wrap:wrap}
+    .blg-badge{padding:2px 8px;border-radius:var(--radius-sm);font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+    .blg-card-title{font-size:1rem;font-weight:600;line-height:1.4;color:#fff;margin-bottom:.5rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .blg-card-title a{color:inherit;text-decoration:none}
+    .blg-card-title a:hover{color:var(--primary-blue)}
+    .blg-card-excerpt{font-size:.82rem;color:var(--text-muted);line-height:1.6;flex:1;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.75rem}
+    .blg-card-foot{display:flex;align-items:center;justify-content:space-between;font-size:.72rem;color:var(--text-muted);padding-top:.65rem;border-top:1px solid var(--border-color)}
+    .blg-card-foot span{display:flex;align-items:center;gap:4px}
+    .blg-card-foot svg{width:13px;height:13px}
+
+    /* Featured */
+    .blg-featured{grid-column:1/-1;display:grid;grid-template-columns:1.2fr 1fr;border:1px solid rgba(11,99,217,.25)}
+    .blg-featured .blg-card-img-wrap{height:100%;min-height:280px}
+    .blg-featured .blg-card-img{height:100%;min-height:280px}
+    .blg-featured .blg-card-body{padding:1.75rem;justify-content:center}
+    .blg-featured .blg-card-title{font-size:1.35rem;-webkit-line-clamp:3}
+    .blg-featured .blg-card-excerpt{-webkit-line-clamp:4}
+    .blg-featured .blg-feat-tag{display:inline-flex;align-items:center;gap:4px;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary-blue);margin-bottom:.25rem}
+    .blg-featured .blg-feat-tag svg{width:12px;height:12px}
+
+    /* Pagination */
+    .blg-pag{display:flex;align-items:center;justify-content:center;gap:6px;padding:2.5rem 0 1.5rem;flex-wrap:wrap}
+    .blg-pag-prev,.blg-pag-next{display:flex;align-items:center;gap:6px;padding:8px 18px;border-radius:999px;border:1px solid var(--border-color);background:rgba(255,255,255,.03);color:var(--text-muted);font-size:.8rem;font-weight:500;cursor:pointer;transition:all .25s;letter-spacing:.01em}
+    .blg-pag-prev:hover,.blg-pag-next:hover{border-color:var(--primary-blue);color:#fff;background:rgba(11,99,217,.08)}
+    .blg-pag-prev:disabled,.blg-pag-next:disabled{opacity:.25;cursor:default;pointer-events:none}
+    .blg-pag-prev svg,.blg-pag-next svg{width:14px;height:14px}
+    .blg-pag-nums{display:flex;align-items:center;gap:4px;margin:0 8px;background:rgba(255,255,255,.03);border:1px solid var(--border-color);border-radius:999px;padding:4px}
+    .blg-pag-btn{min-width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:999px;border:none;background:transparent;color:var(--text-muted);font-size:.8rem;font-weight:500;cursor:pointer;transition:all .25s;padding:0 6px}
+    .blg-pag-btn:hover{color:#fff;background:rgba(255,255,255,.06)}
+    .blg-pag-btn.active{background:var(--primary-blue);color:#fff;box-shadow:0 2px 12px rgba(11,99,217,.35);font-weight:600}
+    .blg-pag-dots{color:var(--text-muted);font-size:.75rem;padding:0 2px;letter-spacing:2px}
+    .blg-pag-info{font-size:.75rem;color:var(--text-muted);margin-left:12px;letter-spacing:.02em}
+
+    /* Responsive */
+    @media(max-width:900px){
+      .blg-grid{grid-template-columns:repeat(2,1fr)}
+      .blg-featured{grid-template-columns:1fr}
+      .blg-featured .blg-card-img-wrap{min-height:200px;height:200px}
+      .blg-featured .blg-card-img{min-height:200px;height:200px}
+    }
+    @media(max-width:600px){
+      .blg-grid{grid-template-columns:1fr;gap:1rem}
+      .blg-hero{padding:3rem 1rem 2rem}
+      .blg-section{padding:1.5rem 1rem 2rem}
+      .blg-filters{padding:0 1rem}
+    }
+  </style>
+
 <footer>
     <div class="footer-grid">
-      <div class="footer-section">
-        <h4>Quick URL Scan</h4>
-        <div class="footer-quick-check">
-          <input type="text" placeholder="Enter URL " class="form-input">
-          <button class="btn btn-primary btn-sm">Quick Check</button>
+      <div class="footer-section footer-brand">
+        <h3 class="footer-brand-title">PhishNet</h3>
+        <p class="footer-brand-desc">Scan URLs and emails for phishing threats, malware, and security risks in real-time</p>
+        <div class="footer-cta-row">
+          <a href="index.html#quick-scan" class="footer-cta-btn" data-scan-type="url">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Scan URL
+          </a>
+          <a href="index.html#quick-scan" class="footer-cta-btn" data-scan-type="email">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            Check Email
+          </a>
         </div>
       </div>
 
@@ -113,35 +195,38 @@
         <ul>
           <li><a href="dashboard.html">Email/URL Scan</a></li>
           <li><a href="dashboard.html">Dashboard</a></li>
+          <li><a href="reports.html">Reports</a></li>
           <li><a href="pricing.html">Pricing</a></li>
+          <li><a href="blog.html">Blog</a></li>
         </ul>
       </div>
 
       <div class="footer-section">
-        <h4>About</h4>
+        <h4>Information</h4>
         <ul>
-          <li><a href="terms.html">Terms & Services</a></li>
-          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="about.html">About Us</a></li>
           <li><a href="faq.html">FAQs</a></li>
-          <li><a href="about.html">Features</a></li>
-          <li><a href="blog.html">Blog</a></li>
+          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="terms.html">Terms of Service</a></li>
+          <li><a href="demo.html">Demos</a></li>
         </ul>
       </div>
 
       <div class="footer-section">
         <h4>Connect With Us</h4>
         <div class="footer-socials">
-          <a href="#" aria-label="Instagram"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
+          <a href="#" aria-label="Twitter/X"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
           <a href="#" aria-label="Facebook"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>
-          <a href="#" aria-label="Twitter"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
-          <a href="#" aria-label="GitHub"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg></a>
           <a href="#" aria-label="LinkedIn"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a>
+          <a href="#" aria-label="GitHub"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg></a>
+          <a href="#" aria-label="Instagram"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
         </div>
       </div>
     </div>
 
     <div class="footer-copyright">
-      © 2025 PhishNet. All rights reserved.
+      <div class="footer-copyright-line"></div>
+      &copy; 2026 PhishNet. All rights reserved.
     </div>
   </footer>
 

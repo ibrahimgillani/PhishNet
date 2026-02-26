@@ -1,96 +1,92 @@
 (function(){
-  // Helper to create tip element
+  // Type config
+  const TYPE_CONFIG = {
+    warning: { label: 'Warning', color: '#FFC107', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' },
+    info:    { label: 'Tip', color: '#00B7D9', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' },
+    success: { label: 'PhishNet', color: '#00FF88', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' },
+  };
+
   function createTipEl(tip) {
-    const container = document.createElement('div');
-    container.className = 'security-tip-item';
-    container.style.display = 'flex';
-    container.style.alignItems = 'center';
-    container.style.justifyContent = 'flex-start';
-    container.style.gap = '0.75rem';
-    container.style.padding = '0.6rem';
-    container.style.borderRadius = '8px';
-    container.style.background = 'rgba(255,255,255,0.02)';
-    container.style.minHeight = '48px';
+    const cfg = TYPE_CONFIG[tip.type] || TYPE_CONFIG.info;
+    const el = document.createElement('div');
+    el.className = 'dash-tip-card';
+    el.style.borderLeftColor = cfg.color;
+    el.innerHTML = `
+      <div class="dash-tip-top">
+        <span class="dash-tip-icon" style="color:${cfg.color}">${cfg.icon}</span>
+        <span class="dash-tip-label" style="color:${cfg.color}">${cfg.label}</span>
+      </div>
+      <p class="dash-tip-text">${tip.message}</p>
+    `;
+    return el;
+  }
 
-    const iconWrap = document.createElement('div');
-    iconWrap.style.width = '40px';
-    iconWrap.style.height = '40px';
-    iconWrap.style.display = 'flex';
-    iconWrap.style.alignItems = 'center';
-    iconWrap.style.justifyContent = 'center';
-    iconWrap.style.flex = '0 0 40px';
-    iconWrap.style.borderRadius = '8px';
+  // Built-in security tips relevant to PhishNet's detection capabilities
+  const BUILT_IN_TIPS = [
+    // Phishing awareness
+    { type: 'warning', message: 'Always verify the sender\'s email address — phishers often use look-alike domains (e.g. paypa1.com instead of paypal.com).' },
+    { type: 'warning', message: 'Never enter passwords on HTTP sites. Legitimate services always use HTTPS with a valid certificate.' },
+    { type: 'warning', message: 'Be cautious of urgent messages threatening account suspension — this is a common social engineering tactic.' },
+    { type: 'info', message: 'Hover over links before clicking to preview the actual URL. URL shorteners can hide malicious destinations.' },
+    { type: 'info', message: 'Typosquatting attacks use misspelled brand names (e.g. googlr.com). Always double-check the domain spelling.' },
+    { type: 'warning', message: 'Domains registered less than 30 days ago with login forms are high-risk — phishing sites are typically short-lived.' },
+    // Browser & extension tips
+    { type: 'success', message: 'PhishNet scans every URL across 7 detection layers including Google Safe Browsing, VirusTotal, and ML analysis.' },
+    { type: 'info', message: 'Keep PhishNet protection enabled at all times. You can manage it from the extension popup.' },
+    { type: 'success', message: 'PhishNet detects homograph attacks — Unicode characters that look identical to Latin letters (e.g. аpple.com using Cyrillic "а").' },
+    // Password & account security
+    { type: 'info', message: 'Use a unique password for every account. A password manager makes this easy and secure.' },
+    { type: 'info', message: 'Enable two-factor authentication (2FA) on all important accounts — it blocks 99% of automated attacks.' },
+    { type: 'warning', message: 'If a site asks you to disable your browser\'s security warnings, it\'s almost certainly malicious.' },
+    // SSL & certificate awareness
+    { type: 'warning', message: 'Self-signed or expired SSL certificates are a red flag. PhishNet checks certificate validity on every visit.' },
+    { type: 'info', message: 'Free certificates (Let\'s Encrypt) on newly registered domains with login forms are a common phishing indicator.' },
+    { type: 'info', message: 'Check the padlock icon in your browser\'s address bar — click it to verify the site\'s certificate details.' },
+    // General web safety
+    { type: 'warning', message: 'Avoid downloading files from URLs flagged by PhishNet — they may contain malware or credential-stealing scripts.' },
+    { type: 'info', message: 'Bookmark important sites (bank, email) and use bookmarks to navigate — never follow links from unsolicited messages.' },
+    { type: 'success', message: 'PhishNet\'s ML model (BERT) can detect zero-day phishing pages that aren\'t yet in any threat database.' },
+  ];
 
-    const txt = document.createElement('div');
-    txt.style.flex = '1 1 auto';
-    txt.style.color = '#FFFFFF';
-    txt.style.fontSize = '0.95rem';
-    txt.textContent = tip.message;
-
-    // icon selection
-    let svg = null;
-    if (tip.type === 'warning') {
-      iconWrap.style.background = 'linear-gradient(90deg,#ffecd1,#ffd6b0)';
-      svg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A64A00" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-    } else if (tip.type === 'info') {
-      iconWrap.style.background = 'linear-gradient(90deg,#e8f0ff,#d6e7ff)';
-      svg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#094F9E" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
-    } else if (tip.type === 'success') {
-      iconWrap.style.background = 'linear-gradient(90deg,#e8fff0,#d6ffe6)';
-      svg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0B8A3E" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
-    } else {
-      iconWrap.style.background = 'rgba(255,255,255,0.03)';
-      svg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>';
-    }
-
-    iconWrap.innerHTML = svg;
-    container.appendChild(iconWrap);
-    container.appendChild(txt);
-
-    return container;
+  // Pick 3 random non-repeating tips
+  function getRandomTips(count) {
+    const shuffled = [...BUILT_IN_TIPS].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
   }
 
   async function loadTips() {
     const listEl = document.getElementById('security-tips-list');
     if (!listEl) return;
 
-    // Clear placeholder
     listEl.innerHTML = '<div style="color:#AAAAAA">Loading security tips…</div>';
 
+    let tips = null;
+
+    // Try API first
     try {
       const token = localStorage.getItem('token');
       const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-
       const res = await fetch(getApiUrl(window.API_CONFIG.api.endpoints.dashboard.securityTips), { headers });
-      if (!res.ok) {
-        listEl.innerHTML = '<div style="color:#FFB3B3">Unable to load tips</div>';
-        return;
-      }
-
-      const data = await res.json();
-      if (!data || !Array.isArray(data.tips)) {
-        listEl.innerHTML = '<div style="color:#AAAAAA">No tips available</div>';
-        return;
-      }
-
-      // Render up to 3 tips
-      listEl.innerHTML = '';
-      const tips = data.tips.slice(0,3);
-      tips.forEach(tip => {
-        const el = createTipEl(tip);
-        listEl.appendChild(el);
-      });
-
-      if (tips.length === 0) {
-        const el = document.createElement('div');
-        el.style.color = '#AAAAAA';
-        el.textContent = 'No recommendations at this time.';
-        listEl.appendChild(el);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.tips) && data.tips.length > 0) {
+          tips = data.tips.slice(0, 3);
+        }
       }
     } catch (err) {
-      listEl.innerHTML = '<div style="color:#FFB3B3">Error loading tips</div>';
-      console.error('Failed to load security tips:', err);
+      // API unavailable — fall through to built-in tips
     }
+
+    // Fallback to built-in tips
+    if (!tips || tips.length === 0) {
+      tips = getRandomTips(3);
+    }
+
+    listEl.innerHTML = '';
+    tips.forEach(tip => {
+      const el = createTipEl(tip);
+      listEl.appendChild(el);
+    });
   }
 
   function wireButtons() {

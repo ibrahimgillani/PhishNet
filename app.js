@@ -77,19 +77,23 @@ class AuthManager {
       return response.json();
     })
     .then(data => {
-        if (data.success && data.data.token) {
+        if (data.success && (data.data.token || data.data.accessToken)) {
         // Store token and user info
-        localStorage.setItem('token', data.data.token);
-        // Clear any guest scan history to avoid leaking previous anonymous scans
-        localStorage.removeItem('scanHistory');
+        const token = data.data.token || data.data.accessToken;
+        localStorage.setItem('token', token);
+        if (data.data.refreshToken) {
+          localStorage.setItem('refreshToken', data.data.refreshToken);
+        }
+        // NOTE: We intentionally do NOT clear scanHistory here.
+        // loadScanHistory() on the dashboard will merge local + server data,
+        // de-duplicate entries, and then keep only server-persisted ones.
+        // Clearing here would permanently lose scans that failed to save to MongoDB.
         // Clear any selected report cached from previous sessions
         localStorage.removeItem('selectedScan');
         localStorage.removeItem('selectedScanId');
-        // Clear any guest scan history to avoid leaking previous anonymous scans
-        localStorage.removeItem('scanHistory');
         
         // Sync token to browser extension if available
-        this.syncTokenToExtension(data.data.token);
+        this.syncTokenToExtension(token);
         
         const user = {
           email: data.data.user.email,
@@ -147,7 +151,48 @@ class AuthManager {
     (async () => {
       try {
         const token = localStorage.getItem('token');
+
+        // ── Sync any local-only scans to server before clearing ──
+        // This prevents permanent data loss for scans that failed to save to MongoDB
         if (token) {
+          try {
+            const stored = localStorage.getItem('scanHistory');
+            const localScans = stored ? JSON.parse(stored) : [];
+            const localOnly = localScans.filter(s => s && s.id && String(s.id).startsWith('local-'));
+            if (localOnly.length > 0) {
+              console.log(`[Logout] Syncing ${localOnly.length} local-only scans to server before clearing...`);
+              const saveEndpoint = `${window.API_CONFIG?.api?.authBaseURL || 'http://localhost:5000'}${window.API_CONFIG?.api?.endpoints?.history?.saveUrl || '/api/v1/urls/check'}`;
+              await Promise.allSettled(localOnly.map(scan => {
+                const body = {
+                  url: scan.value || scan.url || '',
+                  status: (scan.threat === 'safe' || scan.status === 'safe') ? 'safe' : 'unsafe',
+                  reasons: scan.indicators || [],
+                  userAction: 'visited',
+                  wasWarned: scan.threat !== 'safe',
+                  confidence: scan.confidence || null,
+                  threatLevel: scan.threat || scan.threatLevel || 'safe',
+                  threatType: scan.threatType || null,
+                  isSafe: scan.threat === 'safe' || scan.status === 'safe',
+                  scanType: scan.type || 'url',
+                  summary: scan.summary || '',
+                  indicators: scan.indicators || [],
+                  issues: scan.issues || [],
+                  details: scan.details || null,
+                  senderEmail: scan.senderEmail || null
+                };
+                return fetch(saveEndpoint, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify(body)
+                }).catch(() => {});
+              }));
+              console.log('[Logout] Local scan sync complete');
+            }
+          } catch (syncErr) {
+            console.warn('[Logout] Failed to sync local scans:', syncErr);
+          }
+
+          // Call logout API
           await fetch(getApiUrl(window.API_CONFIG.api.endpoints.auth.logout), {
             method: 'POST',
             headers: {
@@ -263,9 +308,15 @@ class AuthManager {
       return response.json();
     })
     .then(data => {
-      if (data.success && data.data.token) {
+      if (data.success && (data.data.token || data.data.accessToken)) {
         // Store token and user info
-        localStorage.setItem('token', data.data.token);
+        const token = data.data.token || data.data.accessToken;
+        localStorage.setItem('token', token);
+        if (data.data.refreshToken) {
+          localStorage.setItem('refreshToken', data.data.refreshToken);
+        }
+        // Sync token to browser extension if available
+        this.syncTokenToExtension(token);
         const user = {
           email: data.data.user.email,
           firstName: data.data.user.firstName,
@@ -612,19 +663,19 @@ class NavigationManager {
       </div>
       <div class="profile-menu-divider"></div>
       <a href="settings.html" class="profile-menu-item">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
           <circle cx="12" cy="12" r="3"/>
-          <path d="M12 1v6m0 6v6m6-12v6m-6 0v6m-6-6v6"/>
         </svg>
         Settings
       </a>
-      <button class="profile-menu-item" id="logout-btn">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <button class="profile-menu-item profile-menu-item--danger" id="logout-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
           <polyline points="16 17 21 12 16 7"/>
           <line x1="21" y1="12" x2="9" y2="12"/>
         </svg>
-        Logout
+        Log out
       </button>
     `;
 
@@ -644,14 +695,7 @@ class NavigationManager {
       avatarEl.textContent = user.initials;
     }
 
-    // Ensure email styling is applied inline to avoid being overridden
-    const emailEl = menu.querySelector('.profile-menu-email');
-    if (emailEl) {
-      emailEl.style.setProperty('color', '#9CA3AF', 'important');
-      emailEl.style.setProperty('font-size', '0.85rem', 'important');
-      emailEl.style.setProperty('font-weight', '500', 'important');
-      emailEl.style.setProperty('opacity', '0.85', 'important');
-    }
+    // Email styling handled by CSS .profile-menu-email
 
     const userAvatar = document.querySelector('.user-avatar');
     userAvatar.appendChild(menu);
@@ -692,6 +736,14 @@ class ScanManager {
     this.setupCloseButtons();
   }
 
+  mapThreatLevel(threatLevel) {
+    if (threatLevel === 'safe') return 'safe';
+    if (threatLevel === 'unsafe' || threatLevel === 'phishing' || threatLevel === 'threat') return 'malicious';
+    if (threatLevel === 'low' || threatLevel === 'medium') return 'suspicious';
+    if (threatLevel === 'high' || threatLevel === 'critical') return 'malicious';
+    return 'safe';
+  }
+
   async loadScanHistory() {
     try {
       const token = localStorage.getItem('token');
@@ -726,10 +778,10 @@ class ScanManager {
               value: item.url,
               threat: normalizedThreat || 'safe',
               threatType: item.threatType,
-              confidence: item.confidence,
-              timestamp: new Date(item.checkedAt).getTime(),
-              date: new Date(item.checkedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
-              time: new Date(item.checkedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+              confidence: item.confidence ?? (item.threatScore != null ? (item.status === 'safe' ? Math.max(0, 100 - item.threatScore) : Math.min(100, Math.max(item.threatScore, 50))) : null),
+              timestamp: new Date(item.checkedAt || item.timestamp || item.createdAt || Date.now()).getTime(),
+              date: new Date(item.checkedAt || item.timestamp || item.createdAt || Date.now()).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+              time: new Date(item.checkedAt || item.timestamp || item.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
               indicators: item.indicators || [],
               domain: item.domain,
               isSafe: item.isSafe
@@ -787,11 +839,11 @@ class ScanManager {
 
   setupScanForms() {
     // URL/email scan forms - attach handlers except for homepage panels
-    // Never bind handlers for homepage panels (#panel-url / #panel-email)
+    // Never bind handlers for homepage panels (#panel-url / #panel-email / #hp-panel-url / #hp-panel-email)
     // These are managed by `ScanningSystem` to avoid duplicate event handlers.
     document.querySelectorAll('form').forEach(form => {
-      const isHomepageUrlPanel = !!form.closest('#panel-url');
-      const isHomepageEmailPanel = !!form.closest('#panel-email');
+      const isHomepageUrlPanel = !!form.closest('#panel-url') || !!form.closest('#hp-panel-url');
+      const isHomepageEmailPanel = !!form.closest('#panel-email') || !!form.closest('#hp-panel-email');
       if (isHomepageUrlPanel || isHomepageEmailPanel) return;
 
       const urlInput = form.querySelector('#url-input, input[type="url"]');
@@ -1574,273 +1626,129 @@ class ScanManager {
   }
 
   generatePDFContent(report) {
-    const threatColor = report.threat === 'safe' ? '#00FF88' : report.threat === 'suspicious' ? '#FFC107' : '#FF4D4D';
-    const threatBgColor = report.threat === 'safe' ? 'rgba(0, 255, 136, 0.1)' : report.threat === 'suspicious' ? 'rgba(255, 193, 7, 0.1)' : 'rgba(255, 77, 77, 0.1)';
-    
-    return `
-<!DOCTYPE html>
+    const statusColors = {
+      safe:       { main: '#10B981', label: 'SAFE' },
+      suspicious: { main: '#F59E0B', label: 'SUSPICIOUS' },
+      malicious:  { main: '#EF4444', label: 'MALICIOUS' }
+    };
+    const sc = statusColors[report.threat] || statusColors.safe;
+    const riskLabel = ((r) => {
+      try { const s = String(r).trim().toLowerCase(); if (s === 'safe') return 'Low'; if (s === 'suspicious') return 'Medium'; if (s === 'malicious') return 'High'; if (['low','medium','high','critical'].includes(s)) return s.charAt(0).toUpperCase()+s.slice(1); } catch(e) {}
+      return 'Unknown';
+    })(report.riskLevel);
+    const target = this.escapeHtml(this.getDisplayTarget ? this.getDisplayTarget(report) : (report.senderEmail || ''));
+    const confidence = report.confidence || 0;
+    const topIssues = (report.issues || []).slice(0, 10);
+    const summaryText = (report.summary || '').replace(/<[^>]*>/g, '').substring(0, 500);
+
+    return `<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>PhishNet Scan Report</title>
-  <style>
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      line-height: 1.6;
-      color: #333;
-      background: #f5f5f5;
-      padding: 20px;
-      margin: 0;
-    }
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-      background: white;
-      padding: 40px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    .header {
-      text-align: center;
-      margin-bottom: 30px;
-      border-bottom: 2px solid #0B63D9;
-      padding-bottom: 20px;
-    }
-    .logo {
-      font-size: 28px;
-      font-weight: 700;
-      color: #0B63D9;
-      margin-bottom: 10px;
-    }
-    .report-title {
-      font-size: 20px;
-      color: #666;
-      margin: 0;
-    }
-    .status-section {
-      background: ${threatBgColor};
-      border-left: 4px solid ${threatColor};
-      padding: 20px;
-      margin: 20px 0;
-      border-radius: 4px;
-    }
-    .status-badge {
-      display: inline-block;
-      background: ${threatColor};
-      color: white;
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-weight: 600;
-      margin-bottom: 10px;
-      font-size: 14px;
-    }
-    .status-title {
-      font-size: 24px;
-      font-weight: 700;
-      color: #333;
-      margin: 10px 0;
-    }
-    .scan-info {
-      background: #f9f9f9;
-      padding: 15px;
-      border-radius: 4px;
-      margin: 20px 0;
-    }
-    .info-row {
-      display: flex;
-      padding: 10px 0;
-      border-bottom: 1px solid #eee;
-    }
-    .info-row:last-child {
-      border-bottom: none;
-    }
-    .info-label {
-      font-weight: 600;
-      color: #666;
-      width: 150px;
-      flex-shrink: 0;
-    }
-    .info-value {
-      color: #333;
-      word-break: break-all;
-    }
-    .section {
-      margin: 30px 0;
-    }
-    .section-title {
-      font-size: 18px;
-      font-weight: 700;
-      color: #333;
-      margin-bottom: 15px;
-      padding-bottom: 10px;
-      border-bottom: 2px solid #0B63D9;
-    }
-    .issues-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    .issues-list li {
-      padding: 12px;
-      margin-bottom: 10px;
-      background: #f9f9f9;
-      border-left: 3px solid #0B63D9;
-      border-radius: 4px;
-    }
-    .issue-safe {
-      border-left-color: #00FF88;
-      background: rgba(0, 255, 136, 0.05);
-    }
-    .issue-warning {
-      border-left-color: #FFC107;
-      background: rgba(255, 193, 7, 0.05);
-    }
-    .issue-malicious {
-      border-left-color: #FF4D4D;
-      background: rgba(255, 77, 77, 0.05);
-    }
-    .summary-box {
-      background: #f0f7ff;
-      border: 1px solid #0B63D9;
-      padding: 20px;
-      border-radius: 4px;
-      margin: 20px 0;
-      line-height: 1.8;
-    }
-    .details-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin: 20px 0;
-    }
-    .detail-card {
-      background: #f9f9f9;
-      padding: 15px;
-      border-radius: 4px;
-      border-left: 3px solid #0B63D9;
-    }
-    .detail-card-title {
-      font-weight: 600;
-      color: #666;
-      margin-bottom: 8px;
-      font-size: 14px;
-    }
-    .detail-card-value {
-      font-size: 16px;
-      color: #333;
-      font-weight: 700;
-    }
-    .footer {
-      text-align: center;
-      margin-top: 40px;
-      padding-top: 20px;
-      border-top: 1px solid #eee;
-      color: #999;
-      font-size: 12px;
-    }
-    .confidence-bar {
-      width: 100%;
-      height: 10px;
-      background: #e0e0e0;
-      border-radius: 5px;
-      overflow: hidden;
-      margin: 10px 0;
-    }
-    .confidence-fill {
-      height: 100%;
-      background: ${threatColor};
-      width: ${report.confidence}%;
-      transition: width 0.3s ease;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>PhishNet Report</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; background: #fff; color: #111; width: 210mm; min-height: 297mm; max-height: 297mm; overflow: hidden; margin: 0 auto; }
+  .page { padding: 0 40px 28px; display: flex; flex-direction: column; height: 297mm; }
+
+  /* Top accent bar */
+  .accent { height: 3px; background: ${sc.main}; }
+
+  /* Header */
+  .hdr { display: flex; justify-content: space-between; align-items: center; padding: 24px 0 16px; border-bottom: 1px solid #E5E7EB; }
+  .hdr-brand { font-size: 18px; font-weight: 700; color: #111; letter-spacing: -0.02em; }
+  .hdr-brand span { color: #9CA3AF; font-weight: 400; font-size: 13px; margin-left: 8px; }
+  .hdr-date { font-size: 11px; color: #9CA3AF; }
+
+  /* Verdict */
+  .verdict { padding: 28px 0 20px; }
+  .verdict-label { font-size: 36px; font-weight: 800; color: ${sc.main}; letter-spacing: 0.02em; line-height: 1; }
+  .verdict-meta { font-size: 12px; color: #4B5563; margin-top: 6px; }
+  .verdict-meta span { margin-right: 12px; }
+  .conf-bar { margin-top: 10px; height: 3px; background: #E5E7EB; border-radius: 2px; overflow: hidden; }
+  .conf-fill { height: 100%; background: ${sc.main}; width: ${confidence}%; border-radius: 2px; }
+
+  /* Target */
+  .target { padding: 12px 0 16px; border-bottom: 1px solid #E5E7EB; }
+  .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #9CA3AF; font-weight: 500; margin-bottom: 4px; }
+  .target-val { font-size: 13px; color: #111; word-break: break-all; }
+
+  /* Findings */
+  .findings { padding: 18px 0; }
+  .finding { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 12px; color: #4B5563; line-height: 1.6; }
+  .finding-dash { color: ${sc.main}; font-weight: 700; flex-shrink: 0; }
+
+  /* Summary */
+  .summary-sec { padding: 0 0 18px; }
+  .summary { font-size: 12px; color: #4B5563; line-height: 1.8; }
+
+  /* Details */
+  .details { padding: 0 0 12px; }
+  .detail-row { display: flex; padding: 3px 0; font-size: 11px; }
+  .detail-key { width: 140px; color: #9CA3AF; flex-shrink: 0; }
+  .detail-val { color: #111; font-weight: 500; }
+
+  /* Footer */
+  .ftr { margin-top: auto; padding-top: 12px; border-top: 1px solid #E5E7EB; display: flex; justify-content: space-between; font-size: 9px; color: #D1D5DB; }
+</style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="logo">PhishNet</div>
-      <p class="report-title">Security Scan Report</p>
-    </div>
-
-    <div class="status-section">
-      <span class="status-badge">${(report.threat||'').toUpperCase()} - ${((function(r){
-        try{ const s=String(r).trim().toLowerCase(); if(s==='safe')return 'Low'; if(s==='suspicious')return 'Medium'; if(s==='malicious')return 'High'; if(['low','medium','high','critical'].includes(s)) return s.charAt(0).toUpperCase()+s.slice(1); }catch(e){}
-        return 'Unknown';
-      })(report.riskLevel))} Risk</span>
-      <div class="status-title">${report.threat === 'safe' ? '✓ Safe' : report.threat === 'suspicious' ? '⚠ Suspicious' : '✕ Malicious'}</div>
-      <p style="margin: 0; color: #666; font-size: 14px;">Confidence: ${report.confidence}%</p>
-      <div class="confidence-bar">
-        <div class="confidence-fill"></div>
-      </div>
-    </div>
-
-    <div class="scan-info">
-      <div class="info-row">
-        <div class="info-label">Scan Type:</div>
-        <div class="info-value"><strong>${report.type === 'url' ? 'URL Scan' : 'Email Scan'}</strong></div>
-      </div>
-      <div class="info-row">
-        <div class="info-label">${report.type === 'url' ? 'URL' : 'Email'}:</div>
-        <div class="info-value">${this.escapeHtml(this.getDisplayTarget ? this.getDisplayTarget(report) : (report.senderEmail || extractEmail(report.value) || ''))}</div>
-      </div>
-      <div class="info-row">
-        <div class="info-label">Scan Date:</div>
-        <div class="info-value">${report.date} at ${report.time}</div>
-      </div>
-      <div class="info-row">
-        <div class="info-label">Status:</div>
-        <div class="info-value"><strong style="color: ${threatColor};">${report.threat.toUpperCase()}</strong></div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Detailed Findings</div>
-      <ul class="issues-list">
-        ${report.issues.map(issue => {
-          let className = 'issue-safe';
-          if (issue.startsWith('⚠')) className = 'issue-warning';
-          if (issue.startsWith('✕')) className = 'issue-malicious';
-          return `<li class="${className}">${issue}</li>`;
-        }).join('')}
-      </ul>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Summary</div>
-      <div class="summary-box">
-        ${report.summary}
-      </div>
-    </div>
-
-    ${report.scanDetails ? `
-    <div class="section">
-      <div class="section-title">Technical Details</div>
-      <div class="details-grid">
-        ${Object.entries(report.scanDetails).map(([key, value]) => {
-          const label = key.replace(/([A-Z])/g, ' $1').trim();
-          return `<div class="detail-card">
-            <div class="detail-card-title">${label}</div>
-            <div class="detail-card-value">${value}</div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>
-    ` : ''}
-
-    <div class="footer">
-      <p>This report was generated by PhishNet on ${new Date().toLocaleString()}</p>
-      <p>PhishNet - Professional Phishing & Malware Detection</p>
-    </div>
+<div class="accent"></div>
+<div class="page">
+  <div class="hdr">
+    <div class="hdr-brand">PhishNet<span>Security Report</span></div>
+    <div class="hdr-date">${report.date} at ${report.time}</div>
   </div>
 
-  <script>
-    // Auto-print when opened
-    window.onload = function() {
-      setTimeout(() => window.print(), 500);
-    };
-  </script>
+  <div class="verdict">
+    <div class="verdict-label">${sc.label}</div>
+    <div class="verdict-meta">
+      <span>${riskLabel} Risk</span>
+      <span>${confidence}% confidence</span>
+      <span>${report.type === 'url' ? 'URL' : 'Email'} Scan</span>
+    </div>
+    <div class="conf-bar"><div class="conf-fill"></div></div>
+  </div>
+
+  <div class="target">
+    <div class="lbl">Target</div>
+    <div class="target-val">${target}</div>
+  </div>
+
+  ${topIssues.length ? `
+  <div class="findings">
+    <div class="lbl">Findings (${topIssues.length})</div>
+    ${topIssues.map(issue => {
+      const text = String(issue).replace(/^[✓⚠✕!●]\s*/, '');
+      return `<div class="finding"><span class="finding-dash">—</span><span>${text}</span></div>`;
+    }).join('')}
+  </div>` : ''}
+
+  ${summaryText ? `
+  <div class="summary-sec">
+    <div class="lbl">Summary</div>
+    <div class="summary">${summaryText}</div>
+  </div>` : ''}
+
+  ${report.scanDetails ? `
+  <div class="details">
+    <div class="lbl">Details</div>
+    ${Object.entries(report.scanDetails).slice(0, 8).map(([key, value]) => {
+      const label = key.replace(/([A-Z])/g, ' $1').trim();
+      return `<div class="detail-row"><span class="detail-key">${label}</span><span class="detail-val">${value}</span></div>`;
+    }).join('')}
+  </div>` : ''}
+
+  <div class="ftr">
+    <span>PhishNet &mdash; phishnet.org</span>
+    <span>Generated ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} &middot; For informational purposes only</span>
+  </div>
+</div>
+
+<script>window.onload=function(){setTimeout(()=>window.print(),400)};</script>
 </body>
-</html>
-    `;
+</html>`;
   }
 
   showNotification(message, type = 'info') {
@@ -2332,9 +2240,46 @@ class FormManager {
 
 // ==================== INITIALIZE ON PAGE LOAD ====================
 document.addEventListener('DOMContentLoaded', () => {
+  // ── Fixed header scroll effect ──
+  const headerEl = document.querySelector('header');
+  if (headerEl) {
+    const onScroll = () => {
+      headerEl.classList.toggle('scrolled', window.scrollY > 20);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }
+
   const nav = new NavigationManager();
   window.scanManagerInstance = new ScanManager();
   const forms = new FormManager();
+
+  // ── Footer CTA buttons: scroll to scan section & select tab ──
+  document.querySelectorAll('.footer-cta-btn[data-scan-type]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const scanType = btn.getAttribute('data-scan-type'); // 'url' or 'email'
+      const scanSection = document.getElementById('quick-scan');
+      if (!scanSection) return; // not on index page — let the link navigate
+
+      e.preventDefault();
+
+      // Select the correct tab
+      const tabId = scanType === 'email' ? 'hp-tab-email' : 'hp-tab-url';
+      const tabRadio = document.getElementById(tabId) || document.getElementById(scanType === 'email' ? 'tab-email' : 'tab-url');
+      if (tabRadio) tabRadio.checked = true;
+
+      // Smooth scroll to scan section
+      scanSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      // Focus the input field after scroll completes
+      setTimeout(() => {
+        const panelId = scanType === 'email' ? 'hp-panel-email' : 'hp-panel-url';
+        const panel = document.getElementById(panelId) || document.getElementById(scanType === 'email' ? 'panel-email' : 'panel-url');
+        const input = panel && panel.querySelector('input[type="text"], input[type="email"], input[type="url"]');
+        if (input) input.focus();
+      }, 600);
+    });
+  });
 
   // Note: NavigationManager.init() calls refreshProfileAndUpdate() 
   // which will fetch fresh user data including avatar from server
@@ -2374,7 +2319,8 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (userAvatar && userObj) {
       // If no avatar, show initials
       userAvatar.style.backgroundImage = '';
-      userAvatar.textContent = userObj.initials || 'JD';
+      const fallback = userObj.firstName && userObj.lastName ? (userObj.firstName[0] + userObj.lastName[0]).toUpperCase() : (userObj.email ? userObj.email.split('@')[0].substring(0, 2).toUpperCase() : '');
+      userAvatar.textContent = userObj.initials || fallback;
     }
   }, 800);  // Wait longer to ensure server fetch completes
 
