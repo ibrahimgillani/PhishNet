@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhishNet Protection</title>
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="shortcut icon" type="image/png" href="icon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <!-- INTRO PAGE -->
+    <div id="intro-page" class="page active">
+        <div class="cyber-bg">
+            <div class="cyber-grid"></div>
+            <div class="cyber-orbs">
+                <div class="orb orb-1"></div>
+                <div class="orb orb-2"></div>
+                <div class="orb orb-3"></div>
+            </div>
+            <div class="cyber-lines"></div>
+        </div>
+        
+        <header class="header">
+            <div class="header-left">
+                <h1 class="logo">PhishNet</h1>
+            </div>
+            <div class="header-right">
+                <button id="intro-login-btn" class="btn btn-secondary btn-sm">Login</button>
+            </div>
+        </header>
+
+        <main class="intro-main">
+            <div class="phishnet-title-container">
+                <div class="phishnet-title">PhishNet</div>
+            </div>
+            <div class="tagline" id="tagline"></div>
+        </main>
+
+        <footer class="intro-footer">
+            <p>By using the extension you agree with <a href="#">Terms and Conditions</a> and <a href="#">Privacy Policy</a></p>
+        </footer>
+    </div>
+
+    <!-- DASHBOARD PAGE -->
+    <div id="dashboard-page" class="page">
+        <div class="cyber-bg">
+            <div class="cyber-grid"></div>
+            <div class="cyber-orbs">
+                <div class="orb orb-1"></div>
+                <div class="orb orb-2"></div>
+                <div class="orb orb-3"></div>
+            </div>
+            <div class="cyber-lines"></div>
+        </div>
+
+        <header class="header">
+            <div class="header-left">
+                <button id="menu-toggle-btn" class="icon-btn" title="Open Menu">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"></path></svg>
+                </button>
+                <h1 class="logo">PhishNet</h1>
+            </div>
+            <div class="header-right">
+                <div class="user-info">
+                    <span id="user-avatar" class="user-avatar" title="User Profile"></span>
+                    <div class="user-text">
+                        <span id="username-display" class="username"></span>
+                        <span id="user-email-display" class="user-email"></span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="dashboard-main">
+            <div class="protection-container">
+                <button id="protection-dial" class="protection-dial" role="switch" aria-checked="false" aria-label="Toggle PhishNet Protection">
+                    <div class="dial-logo">PhishNet</div>
+                    <span class="dial-status" id="dial-status">OFF</span>
+                </button>
+                <p class="timer-display" id="timer-display">10:00</p>
+            </div>
+
+            <div class="controls-section">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="always-on-toggle">
+                    <span class="toggle-slider"></span>
+                    <span class="toggle-label">Keep extension always ON</span>
+                </label>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>By using the extension you agree with <a href="#">Terms and Conditions</a> and <a href="#">Privacy Policy</a></p>
+        </footer>
+    </div>
+
+    <!-- MENU DRAWER -->
+    <div id="menu-drawer" class="drawer">
+        <div class="drawer-backdrop"></div>
+        <nav class="drawer-content">
+            <header class="drawer-header">
+                <h2>Menu</h2>
+                <button class="icon-btn close-drawer" title="Close Menu">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95 1.414-1.414z"></path></svg>
+                </button>
+            </header>
+            <ul class="menu-list">
+                <li><button class="menu-btn menu-dashboard" data-action="dashboard">Dashboard</button></li>
+                <li><hr></li>
+                <li><button class="menu-btn" data-action="top-threats">Top Threats</button></li>
+                <li><button class="menu-btn" data-action="security-insights">Security Insights</button></li>
+                <li><button class="menu-btn" data-action="learn-security">Learn About Security</button></li>
+                <li><hr></li>
+                <li><button class="menu-btn" data-action="settings">Extension Settings (v1.0.1)</button></li>
+                <li><button class="menu-btn" data-action="premium">Get Premium</button></li>
+                <li><a href="#" class="menu-link">Help & Support</a></li>
+                <li><hr></li>
+                <li><button class="menu-btn logout" data-action="logout">Log Out</button></li>
+            </ul>
+        </nav>
+    </div>
+
+    <!-- LOGIN MODAL (matches website design) -->
+    <div id="login-modal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content card login-card-extension">
+            <header class="modal-header">
+                <h2>Signin to access Dashboard</h2>
+                <button class="icon-btn close-modal" title="Close Modal">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95 1.414-1.414z"></path></svg>
+                </button>
+            </header>
+            <div class="modal-body">
+                <p class="login-description">This secured access point enables core services and data streams</p>
+                
+                <!-- Login Features (matching website) -->
+                <div class="login-features-compact">
+                    <div class="login-feature-compact">
+                        <svg class="feature-icon-small" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                        <span>Real-time Threat Analysis</span>
+                    </div>
+                    <div class="login-feature-compact">
+                        <svg class="feature-icon-small" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        <span>Threat History & Reports</span>
+                    </div>
+                    <div class="login-feature-compact">
+                        <svg class="feature-icon-small" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        </svg>
+                        <span>Security Alerts</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="login-email">Email address</label>
+                    <input type="email" id="login-email" class="form-input" placeholder="your@email.com" autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <div class="input-with-toggle">
+                        <input type="password" id="login-password" class="form-input password-field" placeholder="Enter your password" autocomplete="current-password">
+                        <button type="button" class="pw-toggle-ext" id="loginPwToggle" title="Toggle password visibility">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <button id="login-submit" class="btn btn-primary full-width">Sign In</button>
+                <hr class="divider">
+                <p class="form-hint">Don't have an account? <button id="goto-signup" class="btn-link">Sign up</button></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOP THREATS MODAL -->
+    <div id="top-threats-modal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content card">
+            <header class="modal-header">
+                <h2>Top Threats</h2>
+                <button class="icon-btn close-modal" title="Close Modal">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95 1.414-1.414z"></path></svg>
+                </button>
+            </header>
+            <div class="modal-body" id="top-threats-body">
+                <p>High-priority recent threats:</p>
+                <div id="top-threats-list" class="top-threats-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECURITY INSIGHTS MODAL -->
+    <div id="security-insights-modal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content card">
+            <header class="modal-header">
+                <h2>Security Insights</h2>
+                <button class="icon-btn close-modal" title="Close Modal">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95 1.414-1.414z"></path></svg>
+                </button>
+            </header>
+            <div class="modal-body" id="security-insights-body">
+                <p>Recent alerts (Malicious / Suspicious only):</p>
+                <div id="insights-list" class="insights-list"></div>
+
+                <hr>
+                <h3 style="margin:6px 0 4px 0; font-size:0.95rem;">Simple Security Tips</h3>
+                <div id="security-tips" class="security-tips">
+                    <!-- Tips populated by popup.js -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS PAGE -->
+    <div id="settings-page" class="page">
+        <div class="cyber-bg">
+            <div class="cyber-grid"></div>
+            <div class="cyber-orbs">
+                <div class="orb orb-1"></div>
+                <div class="orb orb-2"></div>
+                <div class="orb orb-3"></div>
+            </div>
+            <div class="cyber-lines"></div>
+        </div>
+
+        <header class="header">
+            <div class="header-left">
+                <button id="settings-back-btn" class="icon-btn" title="Back to Dashboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10.828 12l5.364 5.364-1.414 1.414L9 13.414l-5.364 5.364-1.414-1.414L7.586 12l-5.364-5.364 1.414-1.414L9 10.586l5.364-5.364 1.414 1.414z"></path></svg>
+                </button>
+                <h1 class="logo">Settings</h1>
+            </div>
+        </header>
+
+        <main class="settings-main">
+            <!-- PROFILE SECTION -->
+            <section class="settings-section profile-section">
+                <h2 class="section-title">User Profile</h2>
+                
+                <div class="profile-picture-container">
+                    <div class="profile-picture" id="profile-picture">
+                        <span class="profile-placeholder" aria-hidden="true">
+                            <svg class="profile-placeholder-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z"/>
+                            </svg>
+                        </span>
+                    </div>
+                    <input type="file" id="profile-picture-input" accept="image/*" style="display: none;">
+                    <button id="profile-picture-btn" class="btn btn-secondary btn-sm">Upload Picture</button>
+                </div>
+
+                <div class="form-group">
+                    <label for="profile-name">Full Name</label>
+                    <input type="text" id="profile-name" class="form-input" placeholder="Your Name">
+                </div>
+
+                <div class="form-group">
+                    <label for="profile-email">Email Address</label>
+                    <input type="email" id="profile-email" class="form-input" placeholder="your@email.com" readonly>
+                </div>
+
+                <button id="profile-save-btn" class="btn btn-primary full-width">Save Profile Changes</button>
+            </section>
+
+            <!-- SCANNING SETTINGS -->
+            <section class="settings-section">
+                <h2 class="section-title">Scanning Settings</h2>
+                
+                <label class="toggle-switch-settings">
+                    <input type="checkbox" id="scan-urls-toggle-page" checked>
+                    <span class="toggle-slider-settings"></span>
+                    <div class="toggle-content">
+                        <span class="toggle-label-settings">Scan URLs</span>
+                        <span class="toggle-desc">Automatically scan links you visit</span>
+                    </div>
+                </label>
+
+                <label class="toggle-switch-settings">
+                    <input type="checkbox" id="scan-emails-toggle-page" checked>
+                    <span class="toggle-slider-settings"></span>
+                    <div class="toggle-content">
+                        <span class="toggle-label-settings">Scan Emails</span>
+                        <span class="toggle-desc">Check email links for threats</span>
+                    </div>
+                </label>
+
+                <label class="toggle-switch-settings">
+                    <input type="checkbox" id="real-time-protection-toggle">
+                    <span class="toggle-slider-settings"></span>
+                    <div class="toggle-content">
+                        <span class="toggle-label-settings">Real-time Protection</span>
+                        <span class="toggle-desc">Block threats instantly</span>
+                    </div>
+                </label>
+            </section>
+
+            <!-- PRIVACY SETTINGS -->
+            <section class="settings-section">
+                <h2 class="section-title">Privacy Settings</h2>
+                
+                <label class="toggle-switch-settings">
+                    <input type="checkbox" id="data-sharing-toggle-page">
+                    <span class="toggle-slider-settings"></span>
+                    <div class="toggle-content">
+                        <span class="toggle-label-settings">Share Anonymous Data</span>
+                        <span class="toggle-desc">Help improve PhishNet with usage data</span>
+                    </div>
+                </label>
+
+                <label class="toggle-switch-settings">
+                    <input type="checkbox" id="auto-submit-toggle-page">
+                    <span class="toggle-slider-settings"></span>
+                    <div class="toggle-content">
+                        <span class="toggle-label-settings">Auto-submit Threats</span>
+                        <span class="toggle-desc">Automatically report detected threats</span>
+                    </div>
+                </label>
+            </section>
+
+            <!-- NOTIFICATIONS SETTINGS -->
+            <section class="settings-section">
+                <h2 class="section-title">Notification Settings</h2>
+                
+                <label class="toggle-switch-settings">
+                    <input type="checkbox" id="notify-toggle-page" checked>
+                    <span class="toggle-slider-settings"></span>
+                    <div class="toggle-content">
+                        <span class="toggle-label-settings">Desktop Notifications</span>
+                        <span class="toggle-desc">Get alerted when threats are detected</span>
+                    </div>
+                </label>
+
+                <label class="toggle-switch-settings">
+                    <input type="checkbox" id="email-alerts-toggle-page">
+                    <span class="toggle-slider-settings"></span>
+                    <div class="toggle-content">
+                        <span class="toggle-label-settings">Email Alerts</span>
+                        <span class="toggle-desc">Receive email notifications for threats</span>
+                    </div>
+                </label>
+
+                <label class="toggle-switch-settings">
+                    <input type="checkbox" id="weekly-report-toggle-page">
+                    <span class="toggle-slider-settings"></span>
+                    <div class="toggle-content">
+                        <span class="toggle-label-settings">Weekly Security Report</span>
+                        <span class="toggle-desc">Get a summary of your security status</span>
+                    </div>
+                </label>
+            </section>
+
+            <!-- ADVANCED SETTINGS -->
+            <section class="settings-section">
+                <h2 class="section-title">Advanced Settings</h2>
+                
+                <label class="toggle-switch-settings">
+                    <input type="checkbox" id="block-pop-ups-toggle">
+                    <span class="toggle-slider-settings"></span>
+                    <div class="toggle-content">
+                        <span class="toggle-label-settings">Block Suspicious Pop-ups</span>
+                        <span class="toggle-desc">Block pop-ups from phishing sites</span>
+                    </div>
+                </label>
+
+                <label class="toggle-switch-settings">
+                    <input type="checkbox" id="safe-search-toggle">
+                    <span class="toggle-slider-settings"></span>
+                    <div class="toggle-content">
+                        <span class="toggle-label-settings">Safe Search Integration</span>
+                        <span class="toggle-desc">Mark phishing sites in search results</span>
+                    </div>
+                </label>
+            </section>
+
+            <!-- SAVE ALL SETTINGS BUTTON -->
+            <button id="settings-save-all-btn" class="btn btn-primary full-width settings-save-btn">Save All Settings</button>
+        </main>
+
+        <footer class="footer">
+            <p>By using the extension you agree with <a href="#">Terms and Conditions</a> and <a href="#">Privacy Policy</a></p>
+        </footer>
+    </div>
+
+    <!-- Premium page removed; Get Premium now opens pricing site directly -->
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="toast"></div>
+
+    <!-- IMAGE CROP MODAL -->
+    <div id="cropper-modal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content card cropper-card">
+            <header class="modal-header">
+                <h2>Adjust Profile Photo</h2>
+                <button class="icon-btn close-modal" title="Close Modal">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95 1.414-1.414z"></path></svg>
+                </button>
+            </header>
+            <div class="modal-body cropper-body">
+                <div class="cropper-stage" id="cropper-stage">
+                    <img id="cropper-image" alt="Crop preview">
+                    <div class="cropper-mask"></div>
+                </div>
+                <div class="cropper-controls">
+                    <label for="cropper-zoom">Zoom</label>
+                    <input type="range" id="cropper-zoom" min="1" max="3" step="0.01" value="1">
+                </div>
+                <div class="cropper-actions">
+                    <button id="cropper-cancel" class="btn btn-secondary">Cancel</button>
+                    <button id="cropper-apply" class="btn btn-primary">Save Photo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+    <script src="settings.js"></script>
+</body>
+</html>
