@@ -6,11 +6,11 @@
 // - Development: http://localhost:3000 (ML backend), http://localhost:5000 (Auth backend)
 // - Production: https://phishnet-backend-5eqv.onrender.com
 
-// ML Backend (scanning, threat intel) - Port 3000
-const ML_API_BASE_URL = window.ML_API_BASE_URL || 'http://localhost:3000';
+// ML Backend (scanning, threat intel)
+const ML_API_BASE_URL = window.ML_API_BASE_URL || 'https://phishnet-backend-5eqv.onrender.com';
 
-// Auth Backend (MongoDB, users, auth) - Port 5000
-const AUTH_API_BASE_URL = window.AUTH_API_BASE_URL || 'http://localhost:5000';
+// Auth Backend (MongoDB, users, auth)
+const AUTH_API_BASE_URL = window.AUTH_API_BASE_URL || 'https://phishnet-auth-backend.onrender.com';
 
 // Legacy support - defaults to Auth backend for compatibility
 const API_BASE_URL = window.API_BASE_URL || AUTH_API_BASE_URL;
