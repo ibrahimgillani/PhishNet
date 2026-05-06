@@ -17,6 +17,7 @@
  */
 
 const axios = require('axios');
+axios.defaults.family = 4; // Force IPv4 to prevent IPv6 timeouts on Windows
 const dns = require('dns');
 const https = require('https');
 const http = require('http');
@@ -221,13 +222,17 @@ async function checkAbuseIPDB(hostname, apiKey) {
   // NOTE: No trusted-domain fast-path — all URLs evaluated.
   // Trusted-domain risk reduction is applied at the scoring layer.
 
-  // Resolve hostname to IP first
-  let ip;
-  try {
-    const ips = await dnsResolve(hostname);
-    ip = ips[0];
-  } catch (e) {
-    return { source: 'AbuseIPDB', safe: true, threats: [], note: 'DNS resolution failed' };
+  // Resolve hostname to IP first (if it's not already an IP)
+  let ip = hostname;
+  const isIP = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(hostname);
+
+  if (!isIP) {
+    try {
+      const ips = await dnsResolve(hostname);
+      ip = ips[0];
+    } catch (e) {
+      return { source: 'AbuseIPDB', safe: true, threats: [], note: `DNS resolution failed for ${hostname}` };
+    }
   }
 
   const { data } = await axios.get(
@@ -368,25 +373,58 @@ async function checkHuggingFace(url, apiToken) {
   // The BERT model's false-positive tendency on bare-domain URLs is handled
   // by the de-escalation multiplier and trusted-domain risk reduction at scoring.
 
-  // New HF Inference Providers endpoint (old api-inference.huggingface.co is deprecated)
-  const endpoint = 'https://router.huggingface.co/hf-inference/models/ealvaradob/bert-finetuned-phishing';
+  // HuggingFace BERT phishing classifier (ealvaradob/bert-finetuned-phishing — 150k+ downloads, 97% accuracy)
+  const modelId = process.env.HUGGINGFACE_MODEL_ID || 'ealvaradob/bert-finetuned-phishing';
+  
+  // Dual-endpoint strategy: HF migrated some models to new router — try both
+  const endpoints = [
+    `https://api-inference.huggingface.co/models/${modelId}`,
+    `https://router.huggingface.co/hf-inference/models/${modelId}`
+  ];
   const headers = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${apiToken}`
+    'Authorization': `Bearer ${apiToken.trim()}`
   };
 
-  const { data } = await axios.post(endpoint, { inputs: url }, { headers, timeout: HF_TIMEOUT });
+  let lastError = null;
+  for (const endpoint of endpoints) {
+    try {
+      const { data } = await axios.post(endpoint, { inputs: url }, { headers, timeout: HF_TIMEOUT });
 
-  // Handle "model is loading" response
-  if (data?.error && typeof data.error === 'string' && data.error.includes('loading')) {
-    // Retry once after estimated wait
-    const wait = Math.min((data.estimated_time || 10) * 1000, 20000);
-    await new Promise(r => setTimeout(r, wait));
-    const retry = await axios.post(endpoint, { inputs: url }, { headers, timeout: HF_TIMEOUT });
-    return parseHFResponse(retry.data, url);
+      // Handle "model is loading" response
+      if (data?.error && typeof data.error === 'string' && data.error.includes('loading')) {
+        const wait = Math.min((data.estimated_time || 10) * 1000, 20000);
+        console.log(`[ThreatIntel] ML Model loading, waiting ${wait/1000}s...`);
+        await new Promise(r => setTimeout(r, wait));
+        const retry = await axios.post(endpoint, { inputs: url }, { headers, timeout: HF_TIMEOUT });
+        return parseHFResponse(retry.data, url);
+      }
+
+      return parseHFResponse(data, url);
+    } catch (err) {
+      const status = err.response?.status;
+      lastError = err;
+      // 404 = model not on this endpoint, try next
+      if (status === 404) {
+        console.log(`[ThreatIntel] ML Model not found at ${endpoint}, trying fallback...`);
+        continue;
+      }
+      // Other errors (401, 503, timeout) — break and report
+      break;
+    }
   }
 
-  return parseHFResponse(data, url);
+  // All endpoints failed
+  const status = lastError?.response?.status;
+  const errorMsg = lastError?.response?.data?.error || lastError?.message;
+  console.error(`[ThreatIntel] ML Model (BERT) API error: ${errorMsg} (HTTP ${status})`);
+  return { 
+    source: 'ML Model (BERT)', 
+    safe: true, 
+    threats: [], 
+    note: `API Error: ${errorMsg}`,
+    error: true 
+  };
 }
 
 function parseHFResponse(data, url) {
@@ -571,6 +609,7 @@ async function followRedirectChain(urlString) {
         method: 'HEAD',
         timeout: REDIRECT_TIMEOUT,
         rejectUnauthorized: false,
+        family: 4, // Force IPv4 to prevent IPv6 timeouts
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) PhishNet/1.0',
           'Accept': 'text/html'
@@ -841,6 +880,13 @@ const TRUSTED_DOMAINS = [
   'whatsapp.com','telegram.org','discord.com','steampowered.com','spotify.com',
   'twitch.tv','zoom.us','slack.com','notion.so','figma.com','canva.com',
   'appspot.com','googleapis.com','gstatic.com','cdn.jsdelivr.net',
+  // AI / LLM platforms
+  'openai.com','chatgpt.com','claude.ai','anthropic.com','gemini.google.com',
+  'huggingface.co','perplexity.ai','midjourney.com','stability.ai',
+  // Additional major platforms
+  'tiktok.com','snapchat.com','pinterest.com','tumblr.com','quora.com',
+  'medium.com','substack.com','wordpress.com','blogger.com',
+  'ebay.com','etsy.com','shopify.com','stripe.com',
   // Local / development — never flag
   'localhost', '127.0.0.1', '[::1]', '0.0.0.0'
 ];
@@ -1991,7 +2037,15 @@ async function scanUrlMultiSource(url, keys = {}) {
     return hSrc?.details?.structureIssues || 0;
   })();
 
-  if (allExternalClean && mlPhishProb > 0.6 && structIssueCount >= 1) {
+  // Extract domain age from source data early so it can be used for corroboration rules
+  const domainAgeSrc = sources.find(s => s.source === 'Domain Age (RDAP)');
+  const domainAgeDays = domainAgeSrc?.details?.domainAgeDays ?? null;
+
+  // Only apply corroboration bonus when external APIs are clean AND the domain
+  // is NOT well-established. For established domains (1+ years) with clean APIs,
+  // ML + heuristic agreement is just correlated false-positive noise, not evidence.
+  const isEstablished = domainAgeDays !== null && domainAgeDays >= 365;
+  if (allExternalClean && mlPhishProb > 0.6 && structIssueCount >= 1 && !isEstablished) {
     // Two independent local methods agree — strong corroboration
     if (mlPhishProb > 0.8 && structIssueCount >= 2) {
       corroborationBonus = 0.20;
@@ -2001,6 +2055,8 @@ async function scanUrlMultiSource(url, keys = {}) {
       corroborationBonus = 0.12;
     }
     explanationParts.push(`Signal corroboration: ML model (${(mlPhishProb*100).toFixed(0)}%) and structural analysis (${structIssueCount} issues) independently converge (bonus +${corroborationBonus.toFixed(2)})`);
+  } else if (allExternalClean && mlPhishProb > 0.6 && structIssueCount >= 1 && isEstablished) {
+    explanationParts.push(`Signal corroboration skipped: domain is ${Math.floor(domainAgeDays / 365)}+ years old with all external APIs clean — ML+heuristic agreement is likely a false positive`);
   }
 
   // ── ADAPTIVE TEMPORAL RISK (ATR) ──
@@ -2016,9 +2072,6 @@ async function scanUrlMultiSource(url, keys = {}) {
     + contributions.heuristics.ssl
     + contributions.heuristics.entropy;
 
-  // Extract domain age from source data
-  const domainAgeSrc = sources.find(s => s.source === 'Domain Age (RDAP)');
-  const domainAgeDays = domainAgeSrc?.details?.domainAgeDays ?? null;
   const preLexical = contributions.ml_model + heuristicTotal + (contributions.headless_browser || 0);
 
   let temporalPenalty = 0;
@@ -2054,7 +2107,10 @@ async function scanUrlMultiSource(url, keys = {}) {
   //      10 years → 0.150 (capped)
   if (domainAgeDays !== null && domainAgeDays >= 365 && allExternalClean) {
     const yearsFactor = domainAgeDays / 365;
-    temporalTrust = Math.min(0.15, 0.05 * Math.log2(yearsFactor));
+    // Increased cap from 0.15 to 0.30 — well-established domains with all-clean
+    // APIs deserve much stronger dampening of local false positives.
+    // 1yr → 0.000, 2yr → 0.050, 5yr → 0.116, 10yr → 0.150, 20yr+ → 0.217 (capped 0.30)
+    temporalTrust = Math.min(0.30, 0.05 * Math.log2(yearsFactor));
     if (temporalTrust > 0.001) {
       contributions.temporal_trust = -temporalTrust;
       explanationParts.push(
@@ -2112,6 +2168,26 @@ async function scanUrlMultiSource(url, keys = {}) {
 
   // Use the higher of combined and additive to ensure we never lose sensitivity
   let riskScore = Math.max(combinedRisk, additiveRisk);
+
+  // ── Established-domain safety cap ──
+  // When ALL external threat intelligence APIs return clean AND the domain is
+  // well-established (1+ years old), the risk should NEVER reach SUSPICIOUS (0.40)
+  // from local-only signals (ML + heuristics). These local methods are inherently
+  // noisy and produce false positives on complex legitimate sites (ChatGPT, etc.).
+  // The purpose of the APIs is to be the ground truth — if they all say clean,
+  // local noise should not override that for established domains.
+  if (allExternalClean && isEstablished && infraRisk < 0.01) {
+    const ESTABLISHED_CAP = 0.30; // Below SUSPICIOUS threshold (0.40)
+    if (riskScore > ESTABLISHED_CAP) {
+      const preCap = riskScore;
+      riskScore = ESTABLISHED_CAP;
+      explanationParts.push(
+        `Established-domain safety cap: all ${sourcesChecked.length} external APIs clean + domain is `
+        + `${Math.floor(domainAgeDays / 365)}+ years old → risk capped from ${(preCap*100).toFixed(0)}% to ${(ESTABLISHED_CAP*100).toFixed(0)}%`
+      );
+      console.log(`[ThreatIntel] Established-domain safety cap for ${hostname}: ${(preCap*100).toFixed(0)}% → ${(ESTABLISHED_CAP*100).toFixed(0)}% (all APIs clean, domain ${Math.floor(domainAgeDays/365)}yr old)`);
+    }
+  }
 
   // ── Apply user feedback calibration weights (if available) ──
   let calibratedContributions = contributions;

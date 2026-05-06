@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data: blob: https:; connect-src 'self' https: http://localhost:*;">
+  <title>About Us - PhishNet</title>
+  <meta name="description" content="Learn about PhishNet's mission to protect users from phishing attacks with AI-powered detection technology.">
+  
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="shortcut icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="apple-touch-icon" href="assets/favicon.png">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <header>
+    <div class="header-container">
+      <a href="index.html" class="brand-logo">
+        <svg class="logo-icon" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M14 2L4 7v6.5c0 6.08 4.27 11.77 10 13.5 5.73-1.73 10-7.42 10-13.5V7L14 2z" fill="url(#logo-grad)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+          <path d="M10 14.5l2.5 2.5L18 11.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <defs>
+            <linearGradient id="logo-grad" x1="4" y1="2" x2="24" y2="26" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#0B63D9"/>
+              <stop offset="100%" stop-color="#00B7D9"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span class="logo-text">PhishNet</span>
+      </a>
+
+      <nav>
+        <ul class="nav-links"></ul>
+      </nav>
+
+      <div class="header-actions">
+        <div class="auth-buttons">
+          <a href="login.html" class="btn btn-outline btn-sm">Dashboard</a>
+        </div>
+        <div class="user-avatar">JD</div>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <section class="hero">
+      <div class="container">
+        <h1 class="animate-fade-in" style="margin-bottom: 1.5rem;">About PhishNet</h1>
+        <p class="animate-fade-in" style="max-width: 700px; margin: 0 auto;">
+          We're on a mission to make the internet safer by protecting users from phishing attacks 
+          with cutting-edge AI technology.
+        </p>
+      </div>
+    </section>
+
+    <!-- Mission Section -->
+    <section style="background: var(--bg-secondary);">
+      <div class="container">
+        <h2 style="text-align: center; margin-bottom: 3rem;">Our Mission</h2>
+        <div class="grid grid-3">
+          <div class="card animate-fade-in">
+            <div class="feature-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+            <h3 style="margin-bottom: 1rem;">Protect</h3>
+            <p style="color: var(--text-muted); line-height: 1.6;">
+              Shield users from evolving phishing threats with real-time AI detection and analysis.
+            </p>
+          </div>
+
+          <div class="card animate-fade-in" style="animation-delay: 0.1s;">
+            <div class="feature-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+              </svg>
+            </div>
+            <h3 style="margin-bottom: 1rem;">Educate</h3>
+            <p style="color: var(--text-muted); line-height: 1.6;">
+              Empower users with knowledge and tools to recognize and avoid phishing attempts.
+            </p>
+          </div>
+
+          <div class="card animate-fade-in" style="animation-delay: 0.2s;">
+            <div class="feature-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2v20M2 12h20"/>
+              </svg>
+            </div>
+            <h3 style="margin-bottom: 1rem;">Innovate</h3>
+            <p style="color: var(--text-muted); line-height: 1.6;">
+              Continuously improve our technology to stay ahead of cybercriminals' tactics.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Story Section -->
+    <section>
+      <div class="container" style="max-width: 800px;">
+        <h2 style="text-align: center; margin-bottom: 2rem;">Our Story</h2>
+        <div class="card" style="padding: 2rem;">
+          <p style="color: var(--text-muted); line-height: 1.8;">
+            PhishNet is an AI-powered cybersecurity solution designed to protect users from phishing websites and malicious emails in real time. Built as a lightweight browser-based system, PhishNet combines heuristic analysis with machine learning models to detect deceptive links, fraudulent websites, and phishing emails before they cause harm. Our goal is to make cybersecurity accessible to everyone by providing clear, non-technical warnings that help users make safer decisions online. By integrating directly into the browsing and email experience, PhishNet delivers seamless, privacy-focused protection that reduces human error and strengthens digital trust for both individuals and organizations.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Location Section -->
+    <section style="background: var(--bg-secondary);">
+      <div class="container" style="max-width: 800px; text-align: center;">
+        <h2 style="margin-bottom: 2rem;">Our Location</h2>
+        <div class="card" style="padding: 2rem;">
+          <h3 style="margin-bottom: 1rem; color: var(--accent-green);">Headquarters</h3>
+          <p style="color: var(--text-muted); line-height: 1.8; font-size: 1.1rem;">
+            Pak-Austria Fachhochschule Institute of Applied Sciences and Technology<br>
+            Mang, Haripur, Khyber Pakhtunkhwa, Pakistan
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section style="background: var(--bg-secondary);">
+      <div class="container">
+        <h2 style="text-align: center; margin-bottom: 3rem;">Why Choose PhishNet</h2>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3 style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+              AI-Powered Detection
+            </h3>
+            <p style="color: var(--text-muted); line-height: 1.6;">
+              Our machine learning algorithms continuously learn from new threats, providing accuracy rates above 95% 
+              with detailed confidence scoring for every scan.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3 style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              Real-Time Analysis
+            </h3>
+            <p style="color: var(--text-muted); line-height: 1.6;">
+              Get instant threat assessments in 1-3 seconds. Our cloud-based infrastructure ensures fast processing 
+              without compromising on accuracy.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3 style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              Privacy First
+            </h3>
+            <p style="color: var(--text-muted); line-height: 1.6;">
+              Your data is encrypted in transit and at rest. We anonymize scan data within 30 days and never share 
+              your personal information with third parties.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3 style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+              For Everyone
+            </h3>
+            <p style="color: var(--text-muted); line-height: 1.6;">
+              From individual users to large enterprises, our flexible pricing and features ensure everyone can 
+              access powerful phishing protection.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section>
+      <div class="container">
+        <h2 style="text-align: center; margin-bottom: 3rem;">Our Impact</h2>
+        <div class="grid grid-4">
+          <div style="text-align: center;">
+            <div id="total-scans" style="font-size: 3rem; font-weight: 700; color: var(--accent-green); margin-bottom: 0.5rem;">-</div>
+            <p style="color: var(--text-muted);">Total URLs Scanned</p>
+          </div>
+          <div style="text-align: center;">
+            <div id="scans-today" style="font-size: 3rem; font-weight: 700; color: var(--accent-green); margin-bottom: 0.5rem;">-</div>
+            <p style="color: var(--text-muted);">Scans Today</p>
+          </div>
+          <div style="text-align: center;">
+            <div id="active-users" style="font-size: 3rem; font-weight: 700; color: var(--accent-green); margin-bottom: 0.5rem;">-</div>
+            <p style="color: var(--text-muted);">Active Users</p>
+          </div>
+          <div style="text-align: center;">
+            <div id="detection-rate" style="font-size: 3rem; font-weight: 700; color: var(--accent-green); margin-bottom: 0.5rem;">-</div>
+            <p style="color: var(--text-muted);">Detection Rate</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script>
+      // Fetch real analytics data from backend
+      async function loadImpactStats() {
+        try {
+          // Analytics endpoint is on the auth backend (port 5000)
+          const authBase = (window.API_CONFIG && window.API_CONFIG.api.authBaseURL) || 'http://localhost:5000';
+          const response = await fetch(`${authBase}/api/v1/analytics`);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          
+          if (!data.success || !data.data) {
+            throw new Error('Invalid response format');
+          }
+          
+          const stats = data.data;
+
+          // Format numbers with K/M suffix
+          const formatNumber = (num) => {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M+';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K+';
+            return num.toString();
+          };
+
+          // Animated count-up effect
+          function animateValue(el, end, suffix = '') {
+            const duration = 1500;
+            const start = 0;
+            const startTime = performance.now();
+            const formatted = formatNumber(end);
+            
+            function update(currentTime) {
+              const elapsed = currentTime - startTime;
+              const progress = Math.min(elapsed / duration, 1);
+              // Ease-out curve
+              const eased = 1 - Math.pow(1 - progress, 3);
+              const current = Math.floor(eased * end);
+              el.textContent = progress < 1 ? formatNumber(current) + suffix : formatted + suffix;
+              if (progress < 1) requestAnimationFrame(update);
+            }
+            requestAnimationFrame(update);
+          }
+
+          // Update DOM with real data from URLCheckHistory aggregation
+          animateValue(document.getElementById('total-scans'), stats.totalScans || 0);
+          animateValue(document.getElementById('scans-today'), stats.scansToday || 0);
+          animateValue(document.getElementById('active-users'), stats.activeUsers || 0);
+          
+          // Detection rate with % suffix
+          const rateEl = document.getElementById('detection-rate');
+          const rate = stats.detectionRate || 0;
+          const dur = 1500;
+          const st = performance.now();
+          function animateRate(now) {
+            const p = Math.min((now - st) / dur, 1);
+            const eased = 1 - Math.pow(1 - p, 3);
+            rateEl.textContent = (eased * rate).toFixed(1) + '%';
+            if (p < 1) requestAnimationFrame(animateRate);
+          }
+          requestAnimationFrame(animateRate);
+
+          console.log('Analytics loaded successfully:', stats);
+
+        } catch (error) {
+          console.error('Error loading impact stats:', error);
+          
+          // Show dashes when backend is unavailable — no fake data
+          document.getElementById('total-scans').textContent = '-';
+          document.getElementById('scans-today').textContent = '-';
+          document.getElementById('active-users').textContent = '-';
+          document.getElementById('detection-rate').textContent = '-';
+        }
+      }
+
+      // Load stats when page loads
+      document.addEventListener('DOMContentLoaded', loadImpactStats);
+    </script>
+
+    <!-- CTA Section -->
+    <section style="background: var(--bg-secondary);">
+      <div class="container" style="text-align: center;">
+        <h2 style="margin-bottom: 1rem;">Join Us in Fighting Phishing</h2>
+        <p style="color: var(--text-muted); margin-bottom: 2rem; max-width: 600px; margin-left: auto; margin-right: auto;">
+          Start protecting yourself and your organization today with PhishNet's AI-powered detection.
+        </p>
+        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+          <a href="https://chromewebstore.google.com/" target="_blank" class="btn btn-primary btn-lg">Add Extention to Chrome</a>
+          <a href="pricing.html" class="btn btn-outline btn-lg">View Pricing</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<footer>
+    <div class="footer-grid">
+      <div class="footer-section footer-brand">
+        <h3 class="footer-brand-title">PhishNet</h3>
+        <p class="footer-brand-desc">Scan URLs and emails for phishing threats, malware, and security risks in real-time</p>
+        <div class="footer-cta-row">
+          <a href="index.html#quick-scan" class="footer-cta-btn" data-scan-type="url">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Scan URL
+          </a>
+          <a href="index.html#quick-scan" class="footer-cta-btn" data-scan-type="email">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            Check Email
+          </a>
+        </div>
+      </div>
+
+      <div class="footer-section">
+        <h4>Services</h4>
+        <ul>
+          <li><a href="dashboard.html">Email/URL Scan</a></li>
+          <li><a href="dashboard.html">Dashboard</a></li>
+          <li><a href="reports.html">Reports</a></li>
+          <li><a href="pricing.html">Pricing</a></li>
+          <li><a href="blog.html">Blog</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-section">
+        <h4>Information</h4>
+        <ul>
+          <li><a href="about.html">About Us</a></li>
+          <li><a href="faq.html">FAQs</a></li>
+          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="terms.html">Terms of Service</a></li>
+          <li><a href="demo.html">Demos</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-section">
+        <h4>Connect With Us</h4>
+        <div class="footer-socials">
+          <a href="#" aria-label="Twitter/X"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+          <a href="#" aria-label="Facebook"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>
+          <a href="#" aria-label="LinkedIn"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a>
+          <a href="#" aria-label="GitHub"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg></a>
+          <a href="#" aria-label="Instagram"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-copyright">
+      <div class="footer-copyright-line"></div>
+      &copy; 2026 PhishNet. All rights reserved.
+    </div>
+  </footer>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+
+  <!-- PhishNet Chatbot Widget -->
+  <div id="chatbot-container">
+    <!-- Greeting Message Bubble -->
+    <div id="chatbot-greeting" class="chatbot-greeting-bubble">
+      <p>Hi, I'm your AI Assistant 👋</p>
+      <p>How may I help you today?</p>
+    </div>
+    
+    <button id="chatbot-toggle" class="chatbot-icon" aria-label="Open Chatbot">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+      </svg>
+    </button>
+    <div id="chatbot-window" class="chatbot-window hidden">
+      <div class="chatbot-header">
+        <div class="chatbot-header-content">
+          <div class="chatbot-avatar">PN</div>
+          <div class="chatbot-title">
+            <h3>PhishNet Assistant</h3>
+            <p class="chatbot-status">Online</p>
+          </div>
+        </div>
+        <div class="chatbot-actions">
+          <button id="chatbot-close" class="chatbot-action-btn" title="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="chatbot-messages" class="chatbot-messages">
+        <div class="chatbot-message bot-message">
+          <div class="message-avatar">PN</div>
+          <div class="message-content">
+            <p>👋 Hi! I'm your PhishNet assistant. Ask me anything about phishing protection, URL safety, or how to use our platform!</p>
+          </div>
+        </div>
+      </div>
+      <div id="chatbot-typing" class="chatbot-typing hidden">
+        <div class="typing-indicator">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
+      <div class="chatbot-input-area">
+        <input type="text" id="chatbot-input" placeholder="Ask about phishing protection..." aria-label="Chat input" />
+        <button id="chatbot-send" class="chatbot-send-btn" aria-label="Send message">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <link rel="stylesheet" href="css/chatbot.css">
+  <script src="js/chatbot.js"></script>
+</body>
+</html>

@@ -116,7 +116,8 @@ urlCheckHistorySchema.statics.getUserHistory = async function (userId, limit = 5
     return await this.find({ userId })
       .sort({ timestamp: -1 })
       .limit(limit)
-      .skip(skip);
+      .skip(skip)
+      .lean();
   } catch (error) {
     console.error('Error fetching user history:', error);
     throw error;

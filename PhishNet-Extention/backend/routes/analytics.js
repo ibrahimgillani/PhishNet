@@ -11,6 +11,11 @@ const {
 // @access  Public
 router.get('/', getAnalytics);
 
+// @route   GET /api/v1/analytics/stats
+// @desc    Get platform analytics (alias for frontend compatibility)
+// @access  Public
+router.get('/stats', getAnalytics);
+
 // @route   POST /api/v1/analytics/update
 // @desc    Update analytics (manual trigger)
 // @access  Private

@@ -132,16 +132,33 @@ router.post('/url-quick', async (req, res) => {
  */
 router.post('/email', async (req, res) => {
   try {
-    const { subject, body, sender = '', emailContent } = req.body;
+    const { subject, body, sender = '', emailContent, rawEmail } = req.body;
 
-    // Support both formats: {subject, body} or {emailContent}
-    const emailSubject = subject || '';
-    const emailBody = body || emailContent || '';
+    // Support rawEmail format (used by frontend scanning-system.js)
+    let emailSubject = subject || '';
+    let emailBody = body || emailContent || '';
+
+    if (rawEmail && !emailSubject && !emailBody) {
+      // Parse rawEmail into subject and body
+      const lines = rawEmail.split('\n');
+      for (const line of lines) {
+        if (line.toLowerCase().startsWith('subject:')) {
+          emailSubject = line.substring(8).trim();
+        }
+      }
+      // Everything after the first blank line is the body
+      const blankLineIdx = rawEmail.indexOf('\n\n');
+      if (blankLineIdx !== -1) {
+        emailBody = rawEmail.substring(blankLineIdx + 2).trim();
+      } else {
+        emailBody = rawEmail;
+      }
+    }
 
     if (!emailSubject && !emailBody) {
       return res.status(400).json({
         success: false,
-        message: 'Email subject and/or body are required'
+        message: 'Email subject and/or body are required. Send {subject, body} or {rawEmail}.'
       });
     }
 

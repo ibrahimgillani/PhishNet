@@ -12,6 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import phishingDetector from './models/phishing-detector.js';
 import scanRoutes from './routes/scan.js';
+import connectDB from './config/database.js';
 
 // Load environment variables
 dotenv.config();
@@ -35,6 +36,8 @@ app.use(helmet({
       fontSrc: ["'self'", "https:", "data:"],
       imgSrc: ["'self'", "data:", "blob:", "https:"],
       connectSrc: ["'self'", "http://localhost:*", "http://127.0.0.1:*", "https:"],
+      frameSrc: ["'self'", "https://*.youtube.com", "https://*.youtube-nocookie.com", "https://youtube.com", "*"],
+      childSrc: ["'self'", "https://*.youtube.com", "*"]
     }
   }
 }));
@@ -44,7 +47,9 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     // Also allow chrome-extension:// and moz-extension:// for browser extensions
+    // Allow file:// (origin is 'null' string)
     if (!origin || 
+        origin === 'null' ||
         origin.startsWith('chrome-extension://') || 
         origin.startsWith('moz-extension://') ||
         origin.startsWith('http://localhost') ||
@@ -86,7 +91,7 @@ app.use((req, res, next) => {
 // ==================== ROUTES ====================
 
 // Serve static website files (signup.html, dashboard.html, etc.)
-app.use(express.static(__dirname, {
+app.use(express.static(path.join(__dirname, 'public'), {
   extensions: ['html'],
   index: 'index.html'
 }));
@@ -104,8 +109,8 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api/scan', scanRoutes);
 
-// Root endpoint
-app.get('/', (req, res) => {
+// API info endpoint (for programmatic access)
+app.get('/api', (req, res) => {
   res.json({
     name: 'PhishNet Backend API',
     version: '1.0.0',
@@ -148,6 +153,13 @@ async function startServer() {
     console.log('\n🚀 Starting PhishNet Backend Server...');
     console.log(`📍 Environment: ${NODE_ENV}`);
     console.log(`🔌 Port: ${PORT}\n`);
+
+    // Connect to MongoDB
+    const dbConnected = await connectDB();
+    if (!dbConnected) {
+      console.warn('⚠️  Server starting without database connection.');
+      console.warn('   Auth and data persistence features will be unavailable.\n');
+    }
 
     // Initialize the phishing detection model
     const modelPath = process.env.LOCAL_MODEL_PATH;

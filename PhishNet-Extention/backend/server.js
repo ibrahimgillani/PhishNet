@@ -41,8 +41,8 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Request logging middleware (simplified)
 app.use((req, res, next) => {
@@ -58,6 +58,7 @@ const urlRoutes = require('./routes/scan');
 const analyticsRoutes = require('./routes/analytics');
 const emailScanRoutes = require('./routes/emailScan');
 const chatbotRoutes = require('./routes/chatbot');
+const breachRoutes = require('./routes/breach');
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
@@ -65,6 +66,140 @@ app.use('/api/v1/urls', urlRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/emails', emailScanRoutes);
 app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/breach', breachRoutes);
+
+// Dashboard Security Tips route
+app.get('/api/dashboard/security-tips', (req, res) => {
+  res.json({
+    success: true,
+    data: [
+      {
+        id: 1,
+        title: 'Verify Sender Identity',
+        description: 'Always check the sender\'s email address carefully. Phishers often use addresses that look similar to legitimate ones.',
+        icon: 'shield',
+        category: 'email'
+      },
+      {
+        id: 2,
+        title: 'Check URLs Before Clicking',
+        description: 'Hover over links to see the actual URL before clicking. Look for misspellings or unusual domains.',
+        icon: 'link',
+        category: 'url'
+      },
+      {
+        id: 3,
+        title: 'Enable Two-Factor Authentication',
+        description: 'Add an extra layer of security to your accounts with 2FA. Even if passwords are compromised, 2FA protects you.',
+        icon: 'lock',
+        category: 'account'
+      },
+      {
+        id: 4,
+        title: 'Keep Software Updated',
+        description: 'Regularly update your browser, operating system, and security software to patch known vulnerabilities.',
+        icon: 'refresh',
+        category: 'general'
+      },
+      {
+        id: 5,
+        title: 'Be Wary of Urgency',
+        description: 'Phishing emails often create a false sense of urgency. Take time to verify before acting on urgent requests.',
+        icon: 'alert',
+        category: 'email'
+      },
+      {
+        id: 6,
+        title: 'Use PhishNet Extension',
+        description: 'Install the PhishNet Chrome extension for real-time protection while browsing the web.',
+        icon: 'extension',
+        category: 'tool'
+      }
+    ]
+  });
+});
+
+// Blog Posts route
+app.get('/api/blog/posts', (req, res) => {
+  res.json({
+    success: true,
+    data: [
+      {
+        id: 1,
+        title: 'The Rise of AI-Powered Phishing Attacks in 2026',
+        excerpt: 'How attackers are using artificial intelligence to craft more convincing phishing emails and how to protect yourself.',
+        author: 'PhishNet Security Team',
+        date: '2026-04-28',
+        category: 'Threat Intelligence',
+        readTime: '5 min',
+        image: null
+      },
+      {
+        id: 2,
+        title: 'Understanding URL Typosquatting: A Deep Dive',
+        excerpt: 'Learn how cybercriminals register domains that look like popular websites to steal your credentials.',
+        author: 'PhishNet Security Team',
+        date: '2026-04-20',
+        category: 'Education',
+        readTime: '7 min',
+        image: null
+      },
+      {
+        id: 3,
+        title: 'How PhishNet Uses Machine Learning to Detect Phishing',
+        excerpt: 'Behind the scenes: our DistilBERT model and 9-source threat intelligence pipeline explained.',
+        author: 'PhishNet Engineering',
+        date: '2026-04-15',
+        category: 'Technology',
+        readTime: '8 min',
+        image: null
+      },
+      {
+        id: 4,
+        title: '5 Signs an Email Is a Phishing Attempt',
+        excerpt: 'Quick checklist to identify phishing emails before they can do damage to your accounts.',
+        author: 'PhishNet Security Team',
+        date: '2026-04-10',
+        category: 'Tips & Tricks',
+        readTime: '4 min',
+        image: null
+      },
+      {
+        id: 5,
+        title: 'Business Email Compromise: The Billion Dollar Threat',
+        excerpt: 'BEC attacks cost businesses billions annually. Learn how to recognize and prevent them.',
+        author: 'PhishNet Security Team',
+        date: '2026-04-05',
+        category: 'Threat Intelligence',
+        readTime: '6 min',
+        image: null
+      },
+      {
+        id: 6,
+        title: 'Setting Up PhishNet Chrome Extension: Complete Guide',
+        excerpt: 'Step-by-step guide to installing and configuring PhishNet browser extension for maximum protection.',
+        author: 'PhishNet Support',
+        date: '2026-03-30',
+        category: 'Guides',
+        readTime: '3 min',
+        image: null
+      }
+    ]
+  });
+});
+
+app.get('/api/blog/posts/:id', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      id: req.params.id,
+      title: 'Blog Post',
+      content: 'Full blog content would be loaded from database.',
+      author: 'PhishNet Security Team',
+      date: '2026-04-28'
+    }
+  });
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

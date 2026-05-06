@@ -59,101 +59,48 @@
       #${BUTTON_ID} {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        padding: 5px 14px 5px 11px;
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 20px;
-        background: rgba(15, 15, 20, 0.88);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        color: rgba(255,255,255,0.92);
+        gap: 8px;
+        padding: 8px 18px;
+        border: none;
+        border-radius: 6px;
+        background: linear-gradient(135deg, #0B63D9 0%, #0077D9 100%);
+        color: #ffffff;
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
-        font-size: 11.5px;
-        font-weight: 500;
+        font-size: 13px;
+        font-weight: 600;
         cursor: pointer;
-        box-shadow: 0 1px 8px rgba(0,0,0,0.25), 0 0 0 0.5px rgba(255,255,255,0.04);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 2px 6px rgba(11, 99, 217, 0.25);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         z-index: 99999;
         white-space: nowrap;
         line-height: 1;
         margin: 4px 6px;
-        letter-spacing: 0.3px;
-        position: relative;
-        overflow: hidden;
-      }
-      #${BUTTON_ID}::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: 20px;
-        padding: 1px;
-        background: linear-gradient(135deg, rgba(56,189,248,0.2), rgba(99,102,241,0.15), rgba(56,189,248,0.05));
-        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor;
-        mask-composite: exclude;
-        pointer-events: none;
-        opacity: 0;
-        transition: opacity 0.3s ease;
       }
       #${BUTTON_ID}:hover {
-        background: rgba(20, 20, 28, 0.95);
-        box-shadow: 0 2px 16px rgba(56,189,248,0.12), 0 0 0 0.5px rgba(56,189,248,0.1);
-        border-color: rgba(56,189,248,0.15);
-        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(11, 99, 217, 0.35);
+        background: linear-gradient(135deg, #0050C0 0%, #0055BB 100%);
       }
-      #${BUTTON_ID}:hover::before { opacity: 1; }
       #${BUTTON_ID}:active {
-        transform: scale(0.97);
-        box-shadow: 0 1px 6px rgba(0,0,0,0.3);
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(11, 99, 217, 0.2);
       }
       #${BUTTON_ID}.scanning {
         pointer-events: none;
-        border-color: rgba(56,189,248,0.15);
-      }
-      #${BUTTON_ID}.scanning::after {
-        content: '';
-        position: absolute;
-        bottom: 0; left: 0;
-        height: 1.5px;
-        width: 40%;
-        background: linear-gradient(90deg, transparent, rgba(56,189,248,0.7), transparent);
-        animation: phishnet-scan-slide 1.2s ease-in-out infinite;
-        border-radius: 0 0 20px 20px;
-      }
-      @keyframes phishnet-scan-slide {
-        0% { left: -40%; }
-        100% { left: 100%; }
+        opacity: 0.8;
       }
       @keyframes phishnet-spin {
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
       }
-      @keyframes phishnet-pulse {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.4; transform: scale(0.7); }
-      }
       #${BUTTON_ID} .phishnet-icon {
-        width: 14px;
-        height: 14px;
+        width: 15px;
+        height: 15px;
         display: inline-block;
         flex-shrink: 0;
-      }
-      #${BUTTON_ID} .phishnet-dot {
-        width: 4px; height: 4px;
-        background: #38bdf8;
-        border-radius: 50%;
-        box-shadow: 0 0 6px rgba(56,189,248,0.5);
-        display: inline-block;
-        flex-shrink: 0;
-        margin-left: -2px;
       }
       #${BUTTON_ID} .phishnet-label {
-        opacity: 0.85;
-        transition: opacity 0.2s ease;
-      }
-      #${BUTTON_ID}:hover .phishnet-label { opacity: 1; }
-      #${BUTTON_ID}:hover .phishnet-dot {
-        box-shadow: 0 0 8px rgba(56,189,248,0.7);
+        opacity: 1;
       }
 
       /* ─── Overlay Panel ─── */
@@ -891,11 +838,10 @@
     const btn = document.createElement('button');
     btn.id = BUTTON_ID;
     btn.innerHTML = `
-      <svg class="phishnet-icon" viewBox="0 0 24 24" fill="none" stroke="rgba(56,189,248,0.9)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <svg class="phishnet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
       </svg>
-      <span class="phishnet-dot"></span>
-      <span class="phishnet-label">PhishNet</span>
+      <span class="phishnet-label">Scan with PhishNet</span>
     `;
     btn.addEventListener('click', onScanClick);
     return btn;
@@ -958,11 +904,10 @@
     if (btn) {
       btn.classList.add('scanning');
       btn.innerHTML = `
-        <svg class="phishnet-icon" viewBox="0 0 24 24" fill="none" stroke="rgba(56,189,248,0.9)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="animation: phishnet-spin 2s linear infinite">
+        <svg class="phishnet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation: phishnet-spin 2s linear infinite">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         </svg>
-        <span class="phishnet-dot" style="animation: phishnet-pulse 1s ease-in-out infinite"></span>
-        <span class="phishnet-label" style="opacity:0.6">Scanning</span>
+        <span class="phishnet-label">Scanning...</span>
       `;
     }
 
@@ -1000,11 +945,10 @@
       if (btn) {
         btn.classList.remove('scanning');
         btn.innerHTML = `
-          <svg class="phishnet-icon" viewBox="0 0 24 24" fill="none" stroke="rgba(56,189,248,0.9)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="phishnet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           </svg>
-          <span class="phishnet-dot"></span>
-          <span class="phishnet-label">PhishNet</span>
+          <span class="phishnet-label">Scan with PhishNet</span>
         `;
       }
     }
