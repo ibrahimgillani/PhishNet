@@ -6,7 +6,7 @@
 // Single backend handles everything: auth, scanning, chatbot, analytics
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
 
-const API_BASE_URL = window.API_BASE_URL || (isLocal ? 'http://localhost:5000' : 'https://phishnet-auth-backend.onrender.com');
+const API_BASE_URL = window.API_BASE_URL || (isLocal ? 'http://localhost:5000' : 'https://phishnet-txgk.onrender.com');
 
 // Export configuration object
 const config = {
