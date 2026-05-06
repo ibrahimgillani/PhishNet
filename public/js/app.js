@@ -454,7 +454,72 @@ class NavigationManager {
     this.updateNavigation();
     this.setupEventListeners();
     this.setupDropdowns();
+    this.setupMobileMenu();
     this.refreshProfileAndUpdate();
+  }
+
+  setupMobileMenu() {
+    const toggle = document.getElementById('mobileMenuToggle');
+    const nav = document.querySelector('header nav');
+    if (!toggle || !nav) return;
+
+    // Create overlay element
+    let overlay = document.querySelector('.mobile-nav-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'mobile-nav-overlay';
+      document.body.appendChild(overlay);
+    }
+
+    const openMenu = () => {
+      nav.classList.add('mobile-open');
+      toggle.classList.add('active');
+      toggle.setAttribute('aria-expanded', 'true');
+      overlay.classList.add('active');
+      document.body.classList.add('mobile-menu-open');
+    };
+
+    const closeMenu = () => {
+      nav.classList.remove('mobile-open');
+      toggle.classList.remove('active');
+      toggle.setAttribute('aria-expanded', 'false');
+      overlay.classList.remove('active');
+      document.body.classList.remove('mobile-menu-open');
+    };
+
+    // Toggle on hamburger click
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (nav.classList.contains('mobile-open')) {
+        closeMenu();
+      } else {
+        openMenu();
+      }
+    });
+
+    // Close on overlay click
+    overlay.addEventListener('click', closeMenu);
+
+    // Close when a nav link is clicked
+    nav.addEventListener('click', (e) => {
+      if (e.target.closest('a') && !e.target.closest('.dropdown-toggle')) {
+        closeMenu();
+      }
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && nav.classList.contains('mobile-open')) {
+        closeMenu();
+      }
+    });
+
+    // Close on window resize past breakpoint
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 768) {
+        closeMenu();
+      }
+    });
   }
 
   async refreshProfileAndUpdate() {

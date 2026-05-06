@@ -5429,3 +5429,208 @@ table:not(#scan-results-table) tbody tr:hover {
   .simulator-title { font-size: 2rem; }
   .sim-result-card { padding: 1.5rem; width: 90%; }
 }
+
+/* ============================================================
+   MOBILE RESPONSIVE NAVIGATION
+   ============================================================ */
+
+/* Hamburger Toggle Button - hidden on desktop */
+.mobile-menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  z-index: 1002;
+  flex-direction: column;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  transition: background 0.2s ease;
+}
+
+.mobile-menu-toggle:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.hamburger-line {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 2px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+}
+
+/* Hamburger → X animation when menu is open */
+.mobile-menu-toggle.active .hamburger-line:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+.mobile-menu-toggle.active .hamburger-line:nth-child(2) {
+  opacity: 0;
+  transform: scaleX(0);
+}
+.mobile-menu-toggle.active .hamburger-line:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+/* Mobile Nav Overlay/Backdrop */
+.mobile-nav-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 998;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.mobile-nav-overlay.active {
+  display: block;
+  opacity: 1;
+}
+
+/* ─── Mobile Breakpoint ─── */
+@media (max-width: 768px) {
+
+  /* Show hamburger button */
+  .mobile-menu-toggle {
+    display: flex;
+    order: 3;
+  }
+
+  /* Rearrange header grid for mobile */
+  .header-container {
+    grid-template-columns: 1fr auto auto;
+    grid-template-areas: "logo actions toggle";
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+  }
+
+  /* Place hamburger in grid */
+  .mobile-menu-toggle {
+    grid-area: toggle;
+  }
+
+  /* Mobile nav drawer - slides down from header */
+  nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: rgba(8, 8, 12, 0.97);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    z-index: 999;
+    padding: 76px 1.25rem 1.5rem;
+    transform: translateY(-100%);
+    opacity: 0;
+    visibility: hidden;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.35s ease,
+                visibility 0.35s ease;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  /* Open state */
+  nav.mobile-open {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* Stack nav links vertically */
+  .nav-links {
+    flex-direction: column;
+    gap: 0.25rem;
+    align-items: stretch;
+  }
+
+  .nav-links li {
+    width: 100%;
+  }
+
+  .nav-links a {
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    border-radius: 10px;
+    width: 100%;
+  }
+
+  .nav-links a:hover,
+  .nav-links a.active {
+    background: rgba(255,255,255,0.06);
+  }
+
+  /* Mobile dropdown - inline expand instead of absolute */
+  .dropdown-menu {
+    position: static;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    box-shadow: none;
+    border: none;
+    background: rgba(255,255,255,0.02);
+    border-radius: 8px;
+    margin: 0.25rem 0 0 0;
+    padding: 0.25rem 0.5rem;
+    min-width: auto;
+    backdrop-filter: none;
+    display: none;
+  }
+
+  .dropdown.active .dropdown-menu {
+    display: block;
+  }
+
+  .dropdown-menu a {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.88rem;
+  }
+
+  /* Hide auth buttons text, keep compact */
+  .header-actions {
+    gap: 0.5rem;
+  }
+
+  .auth-buttons .btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.75rem;
+  }
+
+  /* Reduce body top padding for smaller header */
+  body {
+    padding-top: 68px;
+  }
+
+  /* Prevent body scroll when menu is open */
+  body.mobile-menu-open {
+    overflow: hidden;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+  .header-container {
+    padding: 0.45rem 0.75rem;
+  }
+
+  .brand-logo .logo-text {
+    font-size: 1.05rem;
+  }
+
+  .auth-buttons .btn {
+    padding: 0.35rem 0.65rem;
+    font-size: 0.72rem;
+  }
+}
